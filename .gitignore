@@ -1,0 +1,34 @@
+IMAGES/WORLDVIEW 2/WORKING FILES/pansharp_ground_control.txt
+*.prj
+*.hdr
+*.ovr
+*.shp
+*.shx
+*.dbf
+*.xml
+*.TIL
+*.TIF
+*.TXT
+*.tfw
+*.sbx
+*.qpj
+*.sbn
+*.cpg
+*.mxd
+*.qgs
+*.RPB
+*.JPG
+*.IMD
+*.gz
+*.grp
+*.nit
+*.sta
+*.ini
+*.dat
+*.adf
+*.lock
+*.lyr
+*.evf
+*IMAGES
+*1a. IMAGE PREPROCESSING
+*1b. LAND COVER CLASSIFICATION
