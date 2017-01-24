@@ -150,11 +150,26 @@ def output_ds(out_array, img_params):
     bands = img_params[2]
     gt = img_params[3]
     proj = img_params[4]
-    driver = img_params[5]
+    driver = gdal.GetDriverByName('GTiff')
+    driver.Register()
 
     out_ras = driver.Create('regression_results.tif', cols, rows, bands, GDT_UInt16)
     out_ras.SetGeoTransform(gt)
     out_ras.SetProjection(proj)
+
+    print out_array.shape
+
+    for band in range(out_array.shape[2]):
+        #no_value = band_list[band].GetNoDataValue()
+        out_band = out_ras.GetRasterBand(band+1)
+
+        out_band.WriteArray(out_array[:, :, band])
+
+        out_band.SetNoDataValue(0)
+        out_band.FlushCache()
+        out_band.GetStatistics(0, 1)
+
+    #print mask_ds.shape
 
     return
 
@@ -226,13 +241,16 @@ def main():
     # the inverse of the ref scene cloud/shadow mask
     mask_subject = pixels_to_predict(sub_img, submask_img, refmask_img, sub_nbands)
 
-    #display_image(mask_subject)
+    display_image(mask_subject)
 
     result = apply_regression(mask_subject, model)
 
-    display_image(result)
+    #display_image(result)
 
+    output_ds(result, img_params)
 
 
 if __name__ == "__main__":
+    start = tm.time()
     main()
+    print 'Processing time: %f seconds' % (tm.time() - start)
