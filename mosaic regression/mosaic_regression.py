@@ -22,7 +22,9 @@ def display_image(img_array):
 
     #img = exposure.rescale_intensity(img_array, in_range='image', out_range=(0, 255))
     img = img_array
+    #print img.shape
 
+    #i = img
     r = img[:, :, 4]
     g = img[:, :, 3]
     b = img[:, :, 2]
@@ -55,10 +57,17 @@ def mask_dataset(img_ds, mask_ds, b_count):
         masked_bands.append(masked_array)
 
     masked_array = np.dstack(masked_bands)
-    pix = masked_array[masked_array > 0]
-    print pix
+    #print masked_array.shape
+    clear_pixels = masked_array >= 0
+    #print clear_pixels.shape
 
-    return pix
+    matrix = masked_array[clear_pixels].\
+        reshape(clear_pixels.shape[0], clear_pixels.shape[1],
+                clear_pixels.shape[2])
+
+    #print matrix.shape
+
+    return matrix
 
 
 def inverse_mask(img_ds, mask_ds, b_count):
@@ -76,17 +85,52 @@ def inverse_mask(img_ds, mask_ds, b_count):
         masked_bands.append(masked_array)
 
     masked_array = np.dstack(masked_bands)
-    pix = masked_array[masked_array > 0, :]
+    clear_pixels = masked_array >= 0
+    # print clear_pixels.shape
 
-    return pix
+    matrix = masked_array[clear_pixels]. \
+        reshape(clear_pixels.shape[0], clear_pixels.shape[1],
+                clear_pixels.shape[2])
+
+    print matrix.shape
+
+    return matrix
 
 
-def predict_dn(X, Y):
+def pixels_to_predict(img_ds, mask_1, mask_2, b_count):
+    sub_mask = mask_1.GetRasterBand(1).ReadAsArray(0, 0)
+    ref_mask = mask_2.GetRasterBand(1).ReadAsArray(0, 0)
+
+    inverse_mask_2 = np.where(ref_mask == 1, 0, 1)
+    new_mask = sub_mask * inverse_mask_2
+
+    masked_bands = []
+    for band in range(b_count):
+        b = img_ds.GetRasterBand(band + 1)
+        b_array = b.ReadAsArray(0, 0)
+        masked_array = b_array * new_mask
+        # print masked_array
+        masked_bands.append(masked_array)
+
+    masked_array = np.dstack(masked_bands)
+
+    clear_pixels = masked_array >= 0
+    # print clear_pixels.shape
+
+    matrix = masked_array[clear_pixels]. \
+        reshape(clear_pixels.shape[0], clear_pixels.shape[1],
+                clear_pixels.shape[2])
+
+    return matrix
+
+
+def build_regression(x, y):
     # create new array with shape of subject and reference scenes
+    x_reshape = x.reshape(x.shape[0] * )
     regress = tree.DecisionTreeRegressor()
-    regress = regress.fit(X, Y)
+    regress = regress.fit(x, y)
 
-    return
+    return regress
 
 
 def main():
@@ -129,16 +173,30 @@ def main():
     sub_nbands = sub_img.RasterCount
 
     # mask subject scene
-    mask_subject = mask_dataset(sub_img, unionmask_img, sub_nbands)
+    subject_union = mask_dataset(sub_img, unionmask_img, sub_nbands)
+
     # mask reference scene with inverse of subject scene mask
-    mask_reference = mask_dataset(ref_img, unionmask_img, sub_nbands)
+    reference_union = mask_dataset(ref_img, unionmask_img, sub_nbands)
+
     #mask_union = mask_dataset()
 
     #display_image(mask_subject)
     #display_image(mask_reference)
 
-    # apply regression
-    predict_dn(mask_reference, mask_subject)
+    # build regression tree
+    #build_regression(subject_union, reference_union)
+
+    # apply regression tree
+
+    # mask subject scene with its cloud/shadow mask and
+    # the inverse of the ref scene cloud/shadow mask
+    mask_subject = pixels_to_predict(sub_img, submask_img, refmask_img, sub_nbands)
+
+    display_image(mask_subject)
+
+    #display_image(mask_subject)
+
+    #display_image(sub_inv_ref)
 
 
 if __name__ == "__main__":
