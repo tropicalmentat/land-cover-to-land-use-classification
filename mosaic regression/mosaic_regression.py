@@ -8,7 +8,7 @@ import scipy.stats
 from gdalconst import *
 from skimage import exposure
 from skimage import io
-from sklearn.ensemble import RandomForestClassifier
+from sklearn import tree
 from matplotlib import pyplot as plt
 from matplotlib import colors
 from subprocess import call
@@ -18,45 +18,75 @@ io.use_plugin('matplotlib')
 # https://github.com/scikit-image/scikit-image/issues/599
 
 
-def mask_subject(subject_stack, mask):
+def display_image(img_array):
+
+    #img = exposure.rescale_intensity(img_array, in_range='image', out_range=(0, 255))
+    img = img_array
+
+    r = img[:, :, 4]
+    g = img[:, :, 3]
+    b = img[:, :, 2]
+
+    rgb = np.dstack((r, g, b))
+
+    plt.figure()
+    io.imshow(r)
+    io.show()
+
+    return
+
+
+def mask_dataset(img_ds, mask_ds, b_count):
     """
     Masks the subject image-array
     :param subject_stack:
     :return:
     """
+    mask = mask_ds.GetRasterBand(1).ReadAsArray(0, 0)
 
     # mask out cloud pixels
-    # edit this into block reading
-    masked = subject_stack[mask == 1]
+    # TODO edit this into block reading
+    masked_bands = []
+    for band in range(b_count):
+        b = img_ds.GetRasterBand(band+1)
+        b_array = b.ReadAsArray(0, 0)
+        masked_array = b_array * mask
+        #print masked_array
+        masked_bands.append(masked_array)
 
-    sub_shape = subject_stack.shape
-    print sub_shape
-    print masked.shape
+    masked_array = np.dstack(masked_bands)
+    pix = masked_array[masked_array > 0]
+    print pix
 
-    #plt.figure()
-    #io.imshow(masked, cmap=plt.cm.Spectral)
-    #io.show()
-
-    return
-
-
-def mask_reference(reference_stack, mask):
-    """
-    Masks the reference image-array
-    :param reference_stack:
-    :param mask:
-    :return:
-    """
-
-    #mask out cloud pixels
-    masked = reference_stack[mask == 1]
-
-    return
+    return pix
 
 
-def predict_dn():
+def inverse_mask(img_ds, mask_ds, b_count):
+    mask = mask_ds.GetRasterBand(1).ReadAsArray(0, 0)
+    inverse = np.where(mask == 1, 0, 1)
+
+    # mask out cloud pixels
+    # TODO edit this into block reading
+    masked_bands = []
+    for band in range(b_count):
+        b = img_ds.GetRasterBand(band + 1)
+        b_array = b.ReadAsArray(0, 0)
+        masked_array = b_array * inverse
+        # print masked_array
+        masked_bands.append(masked_array)
+
+    masked_array = np.dstack(masked_bands)
+    pix = masked_array[masked_array > 0, :]
+
+    return pix
+
+
+def predict_dn(X, Y):
     # create new array with shape of subject and reference scenes
-    pass
+    regress = tree.DecisionTreeRegressor()
+    regress = regress.fit(X, Y)
+
+    return
 
 
 def main():
@@ -67,13 +97,14 @@ def main():
     ref_dir = r"reference image\\ref.vrt"
     submask_dir = r"sub_mask.tif"
     refmask_dir = r"ref_mask.tif"
+    unionmask_dir = r"union_mask.tif"
 
     sub_img = gdal.Open(sub_dir, GA_ReadOnly)
     if sub_img is None:
         print 'Could not open ' + sub_dir
         sys.exit(1)
 
-    ref_img = gdal.Open(sub_dir, GA_ReadOnly)
+    ref_img = gdal.Open(ref_dir, GA_ReadOnly)
     if ref_img is None:
         print 'Could not open ' + ref_dir
         sys.exit(1)
@@ -88,39 +119,27 @@ def main():
         print 'Could not open ' + refmask_dir
         sys.exit(1)
 
+    unionmask_img = gdal.Open(unionmask_dir, GA_ReadOnly)
+    if unionmask_img is None:
+        print 'Could not open ' + refmask_dir
+        sys.exit(1)
+
     # build image array stacks for subject and reference scenes
-    sub_bands = []
+
     sub_nbands = sub_img.RasterCount
-    for band in range(sub_nbands):
-        b = sub_img.GetRasterBand(band+1)
-        b_array = b.ReadAsArray(0, 0)
-        sub_bands.append(b_array)
-        #print b_array
 
-    sub_stack = np.dstack(sub_bands)
-    #print sub_stack.shape
+    # mask subject scene
+    mask_subject = mask_dataset(sub_img, unionmask_img, sub_nbands)
+    # mask reference scene with inverse of subject scene mask
+    mask_reference = mask_dataset(ref_img, unionmask_img, sub_nbands)
+    #mask_union = mask_dataset()
 
-    ref_bands = []
-    ref_nbands = ref_img.RasterCount
-    for band in range(ref_nbands):
-        b = ref_img.GetRasterBand(band + 1)
-        b_array = b.ReadAsArray(0, 0)
-        ref_bands.append(b_array)
-        # print b_array
+    #display_image(mask_subject)
+    #display_image(mask_reference)
 
-    ref_stack = np.dstack(sub_bands)
-    #print ref_stack.shape
+    # apply regression
+    predict_dn(mask_reference, mask_subject)
 
-    # open subject and refence masks
-    submask_array = submask_img.GetRasterBand(1).ReadAsArray(0, 0)
-    refmask_array = refmask_img.GetRasterBand(1).ReadAsArray(0, 0)
-
-    #plt.figure()
-    #io.imshow(refmask_array) #cmap=plt.cm.Spectral)
-    #io.show()
-
-    mask_subject(sub_stack, submask_array)
-    mask_reference(ref_stack, refmask_array)
 
 if __name__ == "__main__":
     main()

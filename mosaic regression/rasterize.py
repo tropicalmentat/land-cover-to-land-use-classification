@@ -59,7 +59,7 @@ def main():
     submask_dir = "G:\LUIGI\ICLEI\IMAGE PROCESSING\\thesis-project-scripts\mosaic regression\sub_mask.shp"
     refmask_dir = "G:\LUIGI\ICLEI\IMAGE PROCESSING\\thesis-project-scripts\mosaic regression\\ref_mask.shp"
     union_mask = "G:\LUIGI\ICLEI\IMAGE PROCESSING\\thesis-project-scripts\mosaic regression\\union_mask.shp"
-    img_dir = "G:\LUIGI\ICLEI\IMAGE PROCESSING\\thesis-project-scripts\mosaic regression\\ref.vrt"
+    img_dir = "G:\LUIGI\ICLEI\IMAGE PROCESSING\\thesis-project-scripts\mosaic regression\\reference image\\ref.vrt"
 
     # open image
     img = gdal.Open(img_dir, GA_ReadOnly)
