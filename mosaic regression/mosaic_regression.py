@@ -126,11 +126,37 @@ def pixels_to_predict(img_ds, mask_1, mask_2, b_count):
 
 def build_regression(x, y):
     # create new array with shape of subject and reference scenes
-    x_reshape = x.reshape(x.shape[0] * )
+    x_reshape = x.reshape(x.shape[0] * x.shape[1], x.shape[2])
+    y_reshape = y.reshape(y.shape[0] * y.shape[1], y.shape[2])
     regress = tree.DecisionTreeRegressor()
-    regress = regress.fit(x, y)
+    regress = regress.fit(x_reshape, y_reshape)
 
     return regress
+
+
+def apply_regression(predict_pix, regressor):
+    predict_pix_reshape = predict_pix.reshape(predict_pix.shape[0] * predict_pix.shape[1], predict_pix.shape[2])
+    print predict_pix.shape
+    y = regressor.predict(predict_pix_reshape)
+    y_reshape =  y.reshape(predict_pix.shape)
+
+    return y_reshape
+
+
+def output_ds(out_array, img_params):
+    # create output raster data-set
+    cols = img_params[0]
+    rows = img_params[1]
+    bands = img_params[2]
+    gt = img_params[3]
+    proj = img_params[4]
+    driver = img_params[5]
+
+    out_ras = driver.Create('regression_results.tif', cols, rows, bands, GDT_UInt16)
+    out_ras.SetGeoTransform(gt)
+    out_ras.SetProjection(proj)
+
+    return
 
 
 def main():
@@ -168,6 +194,16 @@ def main():
         print 'Could not open ' + refmask_dir
         sys.exit(1)
 
+    # image parameters for output data-set
+    cols = sub_img.RasterXSize
+    rows = sub_img.RasterYSize
+    num_bands = sub_img.RasterCount
+    img_gt = sub_img.GetGeoTransform()
+    img_proj = sub_img.GetProjection()
+    img_driver = sub_img.GetDriver()
+
+    img_params = [cols, rows, num_bands, img_gt, img_proj, img_driver]
+
     # build image array stacks for subject and reference scenes
 
     sub_nbands = sub_img.RasterCount
@@ -178,13 +214,11 @@ def main():
     # mask reference scene with inverse of subject scene mask
     reference_union = mask_dataset(ref_img, unionmask_img, sub_nbands)
 
-    #mask_union = mask_dataset()
-
     #display_image(mask_subject)
     #display_image(mask_reference)
 
     # build regression tree
-    #build_regression(subject_union, reference_union)
+    model = build_regression(subject_union, reference_union)
 
     # apply regression tree
 
@@ -192,11 +226,12 @@ def main():
     # the inverse of the ref scene cloud/shadow mask
     mask_subject = pixels_to_predict(sub_img, submask_img, refmask_img, sub_nbands)
 
-    display_image(mask_subject)
-
     #display_image(mask_subject)
 
-    #display_image(sub_inv_ref)
+    result = apply_regression(mask_subject, model)
+
+    display_image(result)
+
 
 
 if __name__ == "__main__":
