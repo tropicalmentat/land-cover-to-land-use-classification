@@ -222,6 +222,7 @@ def main():
 
     output_ds(result, img_params, 'regression_results.tif')
 
+    # TODO: Implement raster mosaicing using arcpy
 
 if __name__ == "__main__":
     start = tm.time()
