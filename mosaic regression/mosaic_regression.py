@@ -1,5 +1,4 @@
 import gdal
-import os
 import sys
 import time as tm
 import numpy as np
@@ -11,15 +10,38 @@ from skimage import io
 from sklearn import tree
 from matplotlib import pyplot as plt
 from matplotlib import colors
-from subprocess import call
 
 io.use_plugin('matplotlib')
 # to get matplotlib display images the following was taken from
 # https://github.com/scikit-image/scikit-image/issues/599
 
 
+def open_image(directory):
+    image_ds = gdal.Open(directory, GA_ReadOnly)
+
+    if image_ds is None:
+        print 'Could not open ' + directory
+        sys.exit(1)
+
+    return image_ds
+
+
+def get_img_param(image_dataset):
+    cols = image_dataset.RasterXSize
+    rows = image_dataset.RasterYSize
+    num_bands = image_dataset.RasterCount
+    img_gt = image_dataset.GetGeoTransform()
+    img_proj = image_dataset.GetProjection()
+    img_driver = image_dataset.GetDriver()
+
+    img_params = [cols, rows, num_bands, img_gt, img_proj, img_driver]
+
+    return img_params
+
+
 def display_image(img_array):
 
+    # TODO: For Landsat8, rescale the values to 0-255
     #img = exposure.rescale_intensity(img_array, in_range='image', out_range=(0, 255))
     img = img_array
     #print img.shape
@@ -70,34 +92,12 @@ def mask_dataset(img_ds, mask_ds, b_count):
     return matrix
 
 
-def inverse_mask(img_ds, mask_ds, b_count):
-    mask = mask_ds.GetRasterBand(1).ReadAsArray(0, 0)
-    inverse = np.where(mask == 1, 0, 1)
-
-    # mask out cloud pixels
-    # TODO edit this into block reading
-    masked_bands = []
-    for band in range(b_count):
-        b = img_ds.GetRasterBand(band + 1)
-        b_array = b.ReadAsArray(0, 0)
-        masked_array = b_array * inverse
-        # print masked_array
-        masked_bands.append(masked_array)
-
-    masked_array = np.dstack(masked_bands)
-    clear_pixels = masked_array >= 0
-    # print clear_pixels.shape
-
-    matrix = masked_array[clear_pixels]. \
-        reshape(clear_pixels.shape[0], clear_pixels.shape[1],
-                clear_pixels.shape[2])
-
-    print matrix.shape
-
-    return matrix
-
-
 def pixels_to_predict(img_ds, mask_1, mask_2, b_count):
+    """
+    mask subject scene with its cloud/shadow mask and
+    the inverse of the ref scene cloud/shadow mask
+    """
+
     sub_mask = mask_1.GetRasterBand(1).ReadAsArray(0, 0)
     ref_mask = mask_2.GetRasterBand(1).ReadAsArray(0, 0)
 
@@ -184,42 +184,18 @@ def main():
     refmask_dir = r"ref_mask.tif"
     unionmask_dir = r"union_mask.tif"
 
-    sub_img = gdal.Open(sub_dir, GA_ReadOnly)
-    if sub_img is None:
-        print 'Could not open ' + sub_dir
-        sys.exit(1)
+    sub_img = open_image(sub_dir)
 
-    ref_img = gdal.Open(ref_dir, GA_ReadOnly)
-    if ref_img is None:
-        print 'Could not open ' + ref_dir
-        sys.exit(1)
+    ref_img = open_image(ref_dir)
 
-    submask_img = gdal.Open(submask_dir, GA_ReadOnly)
-    if submask_img is None:
-        print 'Could not open ' + submask_dir
-        sys.exit(1)
+    submask_img = open_image(submask_dir)
 
-    refmask_img = gdal.Open(refmask_dir, GA_ReadOnly)
-    if refmask_img is None:
-        print 'Could not open ' + refmask_dir
-        sys.exit(1)
+    refmask_img = open_image(refmask_dir)
 
-    unionmask_img = gdal.Open(unionmask_dir, GA_ReadOnly)
-    if unionmask_img is None:
-        print 'Could not open ' + refmask_dir
-        sys.exit(1)
+    unionmask_img = open_image(unionmask_dir)
 
     # image parameters for output data-set
-    cols = sub_img.RasterXSize
-    rows = sub_img.RasterYSize
-    num_bands = sub_img.RasterCount
-    img_gt = sub_img.GetGeoTransform()
-    img_proj = sub_img.GetProjection()
-    img_driver = sub_img.GetDriver()
-
-    img_params = [cols, rows, num_bands, img_gt, img_proj, img_driver]
-
-    # build image array stacks for subject and reference scenes
+    img_params = get_img_param(sub_img)
 
     sub_nbands = sub_img.RasterCount
 
@@ -229,19 +205,19 @@ def main():
     # mask reference scene with inverse of subject scene mask
     reference_union = mask_dataset(ref_img, unionmask_img, sub_nbands)
 
+    # TODO: Find a way to display both images simultaneously
     #display_image(mask_subject)
     #display_image(mask_reference)
 
-    # build regression tree
+    # TODO: Implement overall error computation for each scene that underwent cloud removal
+
+    # build regression tree model
     model = build_regression(subject_union, reference_union)
 
-    # apply regression tree
-
-    # mask subject scene with its cloud/shadow mask and
-    # the inverse of the ref scene cloud/shadow mask
+    # predict pixel values of reference scene
     mask_subject = pixels_to_predict(sub_img, submask_img, refmask_img, sub_nbands)
 
-    display_image(mask_subject)
+    #display_image(mask_subject)
 
     result = apply_regression(mask_subject, model)
 
