@@ -41,20 +41,20 @@ def get_img_param(image_dataset):
 
 def display_image(img_array):
 
-    # TODO: For Landsat8, rescale the values to 0-255
-    #img = exposure.rescale_intensity(img_array, in_range='image', out_range=(0, 255))
-    img = img_array
-    #print img.shape
+    # For Landsat8, rescale the values to 0-255
+    img = exposure.rescale_intensity(img_array, in_range='dtype', out_range='uint8')
+    eq_hist = exposure.equalize_hist(img, nbins=10)
 
-    #i = img
-    r = img[:, :, 4]
-    g = img[:, :, 3]
-    b = img[:, :, 2]
+    out_img = eq_hist
+
+    r = out_img[:, :, 4]
+    g = out_img[:, :, 3]
+    b = out_img[:, :, 2]
 
     rgb = np.dstack((r, g, b))
 
     plt.figure()
-    io.imshow(r)
+    io.imshow(rgb)
     io.show()
 
     return
@@ -63,9 +63,8 @@ def display_image(img_array):
 def mask_dataset(img_ds, mask_ds, b_count):
     """
     Masks the subject image-array
-    :param subject_stack:
-    :return:
     """
+
     mask = mask_ds.GetRasterBand(1).ReadAsArray(0, 0)
 
     # mask out cloud pixels
@@ -75,19 +74,14 @@ def mask_dataset(img_ds, mask_ds, b_count):
         b = img_ds.GetRasterBand(band+1)
         b_array = b.ReadAsArray(0, 0)
         masked_array = b_array * mask
-        #print masked_array
         masked_bands.append(masked_array)
 
     masked_array = np.dstack(masked_bands)
-    #print masked_array.shape
     clear_pixels = masked_array >= 0
-    #print clear_pixels.shape
 
     matrix = masked_array[clear_pixels].\
         reshape(clear_pixels.shape[0], clear_pixels.shape[1],
                 clear_pixels.shape[2])
-
-    #print matrix.shape
 
     return matrix
 
@@ -109,23 +103,28 @@ def pixels_to_predict(img_ds, mask_1, mask_2, b_count):
         b = img_ds.GetRasterBand(band + 1)
         b_array = b.ReadAsArray(0, 0)
         masked_array = b_array * new_mask
-        # print masked_array
         masked_bands.append(masked_array)
 
     masked_array = np.dstack(masked_bands)
 
     clear_pixels = masked_array >= 0
-    # print clear_pixels.shape
 
-    matrix = masked_array[clear_pixels]. \
-        reshape(clear_pixels.shape[0], clear_pixels.shape[1],
-                clear_pixels.shape[2])
+    matrix = masked_array[clear_pixels].reshape(
+        clear_pixels.shape[0],
+        clear_pixels.shape[1],
+        clear_pixels.shape[2]
+    )
 
     return matrix
 
 
 def build_regression(x, y):
-    # create new array with shape of subject and reference scenes
+    """
+    First flattens array which are then fed
+    into the decision tree regressor
+    """
+
+    # flatten input image-arrays
     x_reshape = x.reshape(x.shape[0] * x.shape[1], x.shape[2])
     y_reshape = y.reshape(y.shape[0] * y.shape[1], y.shape[2])
     regress = tree.DecisionTreeRegressor()
@@ -135,15 +134,22 @@ def build_regression(x, y):
 
 
 def apply_regression(predict_pix, regressor):
+    """
+    Takes in the independent pixel values in a
+    flattened array in the subject scene to
+    predict the dependent pixel values
+    """
+    # flatten image array of subject scene
     predict_pix_reshape = predict_pix.reshape(predict_pix.shape[0] * predict_pix.shape[1], predict_pix.shape[2])
-    print predict_pix.shape
+
+    # predict dependent pixel values in the reference scene
     y = regressor.predict(predict_pix_reshape)
-    y_reshape =  y.reshape(predict_pix.shape)
+    y_reshape = y.reshape(predict_pix.shape)
 
     return y_reshape
 
 
-def output_ds(out_array, img_params):
+def output_ds(out_array, img_params, fn='result.tif'):
     # create output raster data-set
     cols = img_params[0]
     rows = img_params[1]
@@ -153,14 +159,11 @@ def output_ds(out_array, img_params):
     driver = gdal.GetDriverByName('GTiff')
     driver.Register()
 
-    out_ras = driver.Create('regression_results.tif', cols, rows, bands, GDT_UInt16)
+    out_ras = driver.Create(fn, cols, rows, bands, GDT_UInt16)
     out_ras.SetGeoTransform(gt)
     out_ras.SetProjection(proj)
 
-    print out_array.shape
-
     for band in range(out_array.shape[2]):
-        #no_value = band_list[band].GetNoDataValue()
         out_band = out_ras.GetRasterBand(band+1)
 
         out_band.WriteArray(out_array[:, :, band])
@@ -168,8 +171,6 @@ def output_ds(out_array, img_params):
         out_band.SetNoDataValue(0)
         out_band.FlushCache()
         out_band.GetStatistics(0, 1)
-
-    #print mask_ds.shape
 
     return
 
@@ -185,13 +186,9 @@ def main():
     unionmask_dir = r"union_mask.tif"
 
     sub_img = open_image(sub_dir)
-
     ref_img = open_image(ref_dir)
-
     submask_img = open_image(submask_dir)
-
     refmask_img = open_image(refmask_dir)
-
     unionmask_img = open_image(unionmask_dir)
 
     # image parameters for output data-set
@@ -201,13 +198,10 @@ def main():
 
     # mask subject scene
     subject_union = mask_dataset(sub_img, unionmask_img, sub_nbands)
+    #display_image(subject_union)
 
     # mask reference scene with inverse of subject scene mask
     reference_union = mask_dataset(ref_img, unionmask_img, sub_nbands)
-
-    # TODO: Find a way to display both images simultaneously
-    #display_image(mask_subject)
-    #display_image(mask_reference)
 
     # TODO: Implement overall error computation for each scene that underwent cloud removal
 
@@ -216,14 +210,17 @@ def main():
 
     # predict pixel values of reference scene
     mask_subject = pixels_to_predict(sub_img, submask_img, refmask_img, sub_nbands)
-
     #display_image(mask_subject)
 
-    result = apply_regression(mask_subject, model)
+    # mask reference scene to prepare for mosaic
+    mask_ref = mask_dataset(ref_img, refmask_img, sub_nbands)
 
+    output_ds(mask_ref, img_params, 'masked_ref.tif')
+
+    result = apply_regression(mask_subject, model)
     #display_image(result)
 
-    output_ds(result, img_params)
+    output_ds(result, img_params, 'regression_results.tif')
 
 
 if __name__ == "__main__":
