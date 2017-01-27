@@ -8,6 +8,32 @@ from gdalconst import *
 from subprocess import call
 
 
+def output_ds(out_array, img_params, fn='result.tif'):
+    # create output raster data-set
+    cols = img_params[0]
+    rows = img_params[1]
+    bands = img_params[2]
+    gt = img_params[3]
+    proj = img_params[4]
+    driver = gdal.GetDriverByName('GTiff')
+    driver.Register()
+
+    out_ras = driver.Create(fn, cols, rows, bands, GDT_UInt16)
+    out_ras.SetGeoTransform(gt)
+    out_ras.SetProjection(proj)
+
+    for band in range(out_array.shape[2]):
+        out_band = out_ras.GetRasterBand(band+1)
+
+        out_band.WriteArray(out_array[:, :, band])
+
+        out_band.SetNoDataValue(0)
+        out_band.FlushCache()
+        out_band.GetStatistics(0, 1)
+
+    return
+
+
 # rasterize cloud and shadow polygon
 def rasterize_clouds(src, geotrans, cols, rows):
     """
@@ -74,8 +100,8 @@ def mask_img(band_list, mask_band, img_params):
         #print band_novalue
         out_band = out_ras.GetRasterBand(band)
 
-        x_bsize = 5000
-        y_bsize = 5000
+        x_bsize = 10000
+        y_bsize = 10000
 
         for i in range(0, rows, y_bsize):
             if i + y_bsize < rows:
@@ -93,12 +119,14 @@ def mask_img(band_list, mask_band, img_params):
                     astype(np.uint16)
 
                 # mask the data-set
-                noval_mask = np.where(band_ds == no_value, 0, band_ds)
+                noval_mask = np.where(band_ds == no_value, 0, band_ds) # set the no-value pixels to 0
 
-                cmask_ds = mask_band.ReadAsArray(j, i, num_cols, num_rows).\
+                cmask_array = mask_band.ReadAsArray(j, i, num_cols, num_rows).\
                     astype(np.uint16)
 
-                masked_ds = noval_mask*cmask_ds
+                cmask = cmask_array == 1
+
+                masked_ds = noval_mask[cmask].reshape(cmask.shape)
 
                 print masked_ds
                 out_band.WriteArray(masked_ds, j, i)
@@ -114,7 +142,7 @@ def main():
     start = tm.time()
 
     # Worldview2
-    img_fn = "G:\LUIGI\ICLEI\IMAGE PROCESSING\\1a. IMAGE PREPROCESSING\WORKING FILES\\naga_urb.tif"
+    img_fn = "G:\LUIGI\ICLEI\IMAGE PROCESSING\\1a. IMAGE PREPROCESSING\WORKING FILES\\urban barangays\\naga_urb.tif"
     poly_fn = "G:\LUIGI\ICLEI\IMAGE PROCESSING\\1a. IMAGE PREPROCESSING\WORKING FILES\\ps_clouds_urban.shp"
 
     # Landsat
