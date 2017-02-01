@@ -4,7 +4,6 @@ import os
 import time as tm
 import numpy as np
 from gdalconst import *
-#from pyproj import Proj, transform
 from subprocess import call
 
 
@@ -90,18 +89,17 @@ def mask_img(band_list, mask_band, img_params):
     proj = img_params[4]
     driver = img_params[5]
 
-    out_ras = driver.Create('cmasked_ds.tif', cols, rows, bands, GDT_UInt16)
+    out_ras = driver.Create('naga_urban_masked.tif', cols, rows, bands, GDT_UInt16)
     out_ras.SetGeoTransform(gt)
     out_ras.SetProjection(proj)
 
     for band in band_list:
-        # TODO: retrieve nodata value from each band
+        print '\n masking band %d...' % band
         no_value = band_list[band].GetNoDataValue()
-        #print band_novalue
         out_band = out_ras.GetRasterBand(band)
 
-        x_bsize = 10000
-        y_bsize = 10000
+        x_bsize = 5000
+        y_bsize = 5000
 
         for i in range(0, rows, y_bsize):
             if i + y_bsize < rows:
@@ -119,17 +117,17 @@ def mask_img(band_list, mask_band, img_params):
                     astype(np.uint16)
 
                 # mask the data-set
-                noval_mask = np.where(band_ds == no_value, 0, band_ds) # set the no-value pixels to 0
+                novalue_mask = np.where(band_ds == no_value, 0, band_ds) # set the no-value pixels to 0
 
                 cmask_array = mask_band.ReadAsArray(j, i, num_cols, num_rows).\
                     astype(np.uint16)
 
-                cmask = cmask_array == 1
+                clear_pixels = novalue_mask * cmask_array
+                cp_shape = clear_pixels.shape
+                print clear_pixels
 
-                masked_ds = noval_mask[cmask].reshape(cmask.shape)
+                out_band.WriteArray(clear_pixels, j, i)
 
-                print masked_ds
-                out_band.WriteArray(masked_ds, j, i)
 
         out_band.SetNoDataValue(0)
         out_band.FlushCache()
@@ -166,7 +164,7 @@ def main():
 
     img_params = [cols, rows, num_bands, img_gt, img_proj, img_driver]
 
-    rasterize_clouds(poly_fn, img_gt, cols, rows)
+    #rasterize_clouds(poly_fn, img_gt, cols, rows)
 
     # collect all bands
     b_list = {}
