@@ -34,7 +34,7 @@ def output_ds(out_array, img_params, fn='result.tif'):
 
 
 # rasterize cloud and shadow polygon
-def rasterize_clouds(src, geotrans, cols, rows):
+def rasterize_mask(src, geotrans, cols, rows):
     """
     Converts cloud formations in vector .SHP file format into a raster geotiff.
     Uses parameters of the source image that the cloud formations were derived from.
@@ -165,7 +165,7 @@ def main():
 
     img_params = [cols, rows, num_bands, img_gt, img_proj, img_driver]
 
-    #rasterize_clouds(poly_fn, img_gt, cols, rows)
+    #rasterize_mask(poly_fn, img_gt, cols, rows)
 
     # collect all bands
     b_list = {}
