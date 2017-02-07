@@ -134,6 +134,7 @@ def mask_img(band_list, mask_band, img_params):
         out_band.GetStatistics(0, 1)
 
     #print mask_ds.shape
+    return
 
 
 def main():
