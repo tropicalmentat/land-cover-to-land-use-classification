@@ -1,4 +1,5 @@
 import gdal
+import arcpy
 import sys
 import time as tm
 import numpy as np
@@ -130,6 +131,9 @@ def build_regression(x, y):
     regress = tree.DecisionTreeRegressor()
     regress = regress.fit(x_reshape, y_reshape)
 
+    #r_score = regress.score(x_reshape, y_reshape)
+    #print r_score
+
     return regress
 
 
@@ -145,6 +149,8 @@ def apply_regression(predict_pix, regressor):
     # predict dependent pixel values in the reference scene
     y = regressor.predict(predict_pix_reshape)
     y_reshape = y.reshape(predict_pix.shape)
+    r_score = regressor.score(y, predict_pix_reshape)
+    print r_score
 
     return y_reshape
 
@@ -208,21 +214,23 @@ def main():
     # build regression tree model
     model = build_regression(subject_union, reference_union)
 
-    # predict pixel values of reference scene
+    # prepare independent pixel values from subject scene
     mask_subject = pixels_to_predict(sub_img, submask_img, refmask_img, sub_nbands)
     #display_image(mask_subject)
 
     # mask reference scene to prepare for mosaic
     mask_ref = mask_dataset(ref_img, refmask_img, sub_nbands)
-
     output_ds(mask_ref, img_params, 'masked_ref.tif')
 
+    # predict pixel values of reference scene
     result = apply_regression(mask_subject, model)
     #display_image(result)
 
     output_ds(result, img_params, 'regression_results.tif')
 
     # TODO: Implement raster mosaicing using arcpy
+    # convert numpy array to raster
+    results_raster = arcpy.NumpyArrayToRaster(result, value_to_nodata=0)
 
 if __name__ == "__main__":
     start = tm.time()
