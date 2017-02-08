@@ -142,17 +142,17 @@ def main():
 
     rasterize_mask(poly_fn, wv2_param)
 
-    # collect all bands
-    b_list = {}
-    for band in range(wv2_param[2]):
-        b_list[band+1] = img.GetRasterBand(band+1)
-
-    # search for output mask from the previous step
-    cwd = os.getcwd()
-    for f in glob.glob(cwd + '\*_mask.tif'):  # search for the .tif file of the mask
-        mask_img = gdal.Open(f, GA_ReadOnly)
-        band_mask = mask_img.GetRasterBand(1)
-        mask_image(b_list, band_mask, wv2_param)
+    # # collect all bands
+    # b_list = {}
+    # for band in range(wv2_param[2]):
+    #     b_list[band+1] = img.GetRasterBand(band+1)
+    #
+    # # search for output mask from the previous step
+    # cwd = os.getcwd()
+    # for f in glob.glob(cwd + '\*_mask.tif'):  # search for the .tif file of the mask
+    #     mask_img = gdal.Open(f, GA_ReadOnly)
+    #     band_mask = mask_img.GetRasterBand(1)
+    #     mask_image(b_list, band_mask, wv2_param)
 
     print 'Processing time: %f' % (tm.time() - start)
 
