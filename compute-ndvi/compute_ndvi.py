@@ -28,14 +28,14 @@ def get_img_param(image_dataset):
     return img_params
 
 
-def compute_ndvi(image, img_params, fn='ndvi.tif'):
+def compute_ndvi(image, img_params, ir=3, nir=4, fn='ndvi.tif'):
     """
     Computes Normalized Difference Vegetation Index (NDVI)
     of multispectral images with Infrared (IR) and Near Infrared (NIR) bands.
     Returns array with ndvi values with shape of original data.
     -------------------------------------------------------------------------
     Creation of new gdal data-set is included in this function
-    because of the MemoryError that numpy throws when a large
+    to avoid the MemoryError that numpy throws when a separate large
     array is created (eg. Worldview2 Pansharpened Image)
     """
 
@@ -58,8 +58,8 @@ def compute_ndvi(image, img_params, fn='ndvi.tif'):
     x_bsize = 5000
     y_bsize = 5000
 
-    ir_band = image.GetRasterBand(3)
-    nir_band = image.GetRasterBand(4)
+    ir_band = image.GetRasterBand(ir)
+    nir_band = image.GetRasterBand(nir)
 
     for i in range(0, rows, y_bsize):
         if i + y_bsize < rows:
@@ -90,16 +90,25 @@ def compute_ndvi(image, img_params, fn='ndvi.tif'):
 
 
 def main():
-    # Open Worldview2 pansharpened image
+    # open Worldview2 pansharpened image
     wv2_dir = "naga_urban_masked.tif"
     wv2_img = open_image(wv2_dir)
 
-    # retrieve image parameters
+    # retrieve Worldview2 image parameters
     wv2_param = get_img_param(wv2_img)
-    #print landsat_param
 
-    # compute landsat ndvi
-    compute_ndvi(wv2_img, wv2_param, fn='wv2_ndvi.tif')
+    # compute Worldview2 ndvi
+    compute_ndvi(wv2_img, wv2_param, ir=3, nir=4, fn='wv2_ndvi.tif')
+
+    # open Landsat multispectral image
+    landsat_dir = "landsat_urban.tif"
+    landsat_img = open_image(landsat_dir)
+
+    # retrieve Landsat image parameters
+    landsat_param = get_img_param(landsat_img)
+
+    # compute Landsat ndvi
+    compute_ndvi(landsat_img, landsat_param, ir=4, nir=5, fn='landsat_ndvi.tif')
 
 
 if __name__ == "__main__":
