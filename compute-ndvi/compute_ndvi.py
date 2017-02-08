@@ -2,14 +2,7 @@ import gdal
 import sys
 import time as tm
 import numpy as np
-import scipy
-import scipy.stats
 from gdalconst import *
-from skimage import exposure
-from skimage import io
-from sklearn import tree
-from matplotlib import pyplot as plt
-from matplotlib import colors
 
 
 def open_image(directory):
@@ -35,15 +28,25 @@ def get_img_param(image_dataset):
     return img_params
 
 
-def output_ds(out_array, img_params, fn='result.tif'):
+def compute_ndvi(image, img_params, fn='ndvi.tif'):
+    """
+    Computes Normalized Difference Vegetation Index (NDVI)
+    of multispectral images with Infrared (IR) and Near Infrared (NIR) bands.
+    Returns array with ndvi values with shape of original data.
+    -------------------------------------------------------------------------
+    Creation of new gdal data-set is included in this function
+    because of the MemoryError that numpy throws when a large
+    array is created (eg. Worldview2 Pansharpened Image)
+    """
+
+    print '\ncomputing ndvi...'
     # create output raster data-set
     cols = img_params[0]
     rows = img_params[1]
-    bands = 1  # ndvi image needs only one band
+    bands = 1  # the ndvi output data-set needs only 1 band
     gt = img_params[3]
     proj = img_params[4]
-    driver = gdal.GetDriverByName('GTiff')
-    driver.Register()
+    driver = img_params[5]
 
     out_ras = driver.Create(fn, cols, rows, bands, GDT_Float32)
     out_ras.SetGeoTransform(gt)
@@ -51,31 +54,7 @@ def output_ds(out_array, img_params, fn='result.tif'):
 
     out_band = out_ras.GetRasterBand(1)
 
-    out_band.WriteArray(out_array)
-
-    out_band.SetNoDataValue(0)
-    out_band.FlushCache()
-    out_band.GetStatistics(0, 1)
-
-    return
-
-
-def compute_ndvi(image, img_params):
-    print '\ncomputing ndvi...'
-    # create output raster data-set
-    cols = img_params[0]
-    rows = img_params[1]
-    bands = 1  # the ndvi output image needs only 1 band
-    gt = img_params[3]
-    proj = img_params[4]
-    driver = img_params[5]
-
-    out_ras = driver.Create('wv2_ndvi.tif', cols, rows, bands, GDT_Float32)
-    out_ras.SetGeoTransform(gt)
-    out_ras.SetProjection(proj)
-
-    out_band = out_ras.GetRasterBand(1)
-
+    # compute ndvi per block
     x_bsize = 5000
     y_bsize = 5000
 
@@ -111,9 +90,8 @@ def compute_ndvi(image, img_params):
 
 
 def main():
-    # Open Landsat
-    wv2_dir = r"naga_cloudmasked.tif"
-
+    # Open Worldview2 pansharpened image
+    wv2_dir = "naga_urban_masked.tif"
     wv2_img = open_image(wv2_dir)
 
     # retrieve image parameters
@@ -121,7 +99,7 @@ def main():
     #print landsat_param
 
     # compute landsat ndvi
-    compute_ndvi(wv2_img, wv2_param)
+    compute_ndvi(wv2_img, wv2_param, fn='wv2_ndvi.tif')
 
 
 if __name__ == "__main__":
