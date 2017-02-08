@@ -1,20 +1,13 @@
-#compute Landsat NDVI
-#compute WV2 NDVI
-#downscale WV2 NDVI to Landsat resolution
-#perform linear regression
-
 import gdal
 import sys
+import os
 import time as tm
 import numpy as np
 import scipy
+import scipy.ndimage
 import scipy.stats
 from gdalconst import *
-from skimage import exposure
-from skimage import io
-from sklearn import tree
-from matplotlib import pyplot as plt
-from matplotlib import colors
+from subprocess import call
 
 
 def open_image(directory):
@@ -65,21 +58,40 @@ def output_ds(out_array, img_params, fn='result.tif'):
     return
 
 
-def compute_ndvi(image):
-    ir_band = image.GetRasterBand(4).ReadAsArray(0, 0).astype(np.float16)
-    nir_band = image.GetRasterBand(5).ReadAsArray(0, 0).astype(np.float16)
-
-    mask = np.greater(ir_band + nir_band, 0)
-    ndvi = np.choose(mask, (0, (nir_band - ir_band) / (nir_band + ir_band)))
-    #ndvi = (nir_band - ir_band) / (nir_band + ir_band + 0.00000000001)
-    #ndvi = nir_band - ir_band
-
-    return ndvi
-
-
-def downscale_image():
+def downscale_image(hires_img, lores_param):
     # compute downscale factor by using image parameters of landsat and wv2
-    pass
+
+    # collect columns, rows, extent, resolution and geotrans, and proj of img to be masked
+    cols = lores_param[0]
+    rows = lores_param[1]
+    geotrans = lores_param[3]
+
+    # unpack geotransform parameters
+    topleft_x = geotrans[0]
+    topleft_y = geotrans[3]
+    x = geotrans[1]
+    y = geotrans[5]
+
+    # compute extents
+    x_min = topleft_x
+    y_min = topleft_y + y*rows
+    x_max = topleft_x + x*cols
+    y_max = topleft_y
+
+    downsample_cmd = ['gdalwarp',
+                      '-r', 'average',
+                      '-te',  # specify extent
+                      str(x_min), str(y_min),
+                      str(x_max), str(y_max),
+                      '-ts',  # specify the number of columns and rows
+                      str(cols), str(rows),
+                      hires_img,
+                      'wv2_ndvi_resampled.tif'
+                      ]
+
+    call(downsample_cmd)
+
+    return
 
 
 def temporal_mask():
@@ -88,22 +100,24 @@ def temporal_mask():
 
 def main():
     # Open Landsat and WV2 ndvi images
-    #landsat_dir = r"subject image/sub.vrt"
-    landsat_dir = r"regression_results.tif"
-    wv2_dir = r""
+    landsat_dir = "landsat_ndvi.tif"
+    wv2_dir = "wv2_ndvi.tif"
 
     landsat_img = open_image(landsat_dir)
+    wv2_img = open_image(wv2_dir)
 
     # retrieve image parameters
     landsat_param = get_img_param(landsat_img)
-    #print landsat_param
+    print 'Landsat8 image has: \n%d columns\n%d rows' % (landsat_param[0], landsat_param[1])
+    wv2_param = get_img_param(wv2_img)
+    print '\nWorldview2 image has: \n%d columns\n%d rows' % (wv2_param[0], wv2_param[1])
 
-    # compute landsat ndvi
-    ndvi = compute_ndvi(landsat_img)
-
-    output_ds(ndvi, landsat_param, fn='ndvi.tif')
+    # downscale wv2 image
+    cwd = os.getcwd()
+    print cwd
+    downscale_image(wv2_dir, landsat_param)
 
 if __name__ == "__main__":
     start = tm.time()
     main()
-    print 'Processing time: %f seconds' % (tm.time() - start)
+    print '\nProcessing time: %f seconds' % (tm.time() - start)
