@@ -25,11 +25,6 @@ def rasterize_mask(src, img_param):
     """
     Converts polygons in .SHP file format into a raster geotiff.
     Uses parameters of the source image that the cloud formations were derived from.
-    :param src: directory of source image
-    :param geotrans: source image geotransform
-    :param cols: source image number of columns
-    :param rows: source image number of rows
-    :return:
     """
     # collect columns, rows, extent, resolution and geotrans, and proj of img to be masked
     cols = img_param[0]
