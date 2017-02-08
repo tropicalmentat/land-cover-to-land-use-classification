@@ -173,7 +173,7 @@ def main():
         #pass
         b_list[band+1] = img.GetRasterBand(band+1)
 
-    # search for output cloudmask from the previous step
+    # search for output mask from the previous step
     cwd = os.getcwd()
     for f in glob.glob(cwd + '\*_mask.tif'):  # search for the .tif file of the mask
         mask_img = gdal.Open(f, GA_ReadOnly)
