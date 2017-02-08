@@ -121,7 +121,7 @@ def pixels_to_predict(img_ds, mask_1, mask_2, b_count):
 
 def build_regression(x, y):
     """
-    First flattens array which are then fed
+    First flattens arrays which are then fed
     into the decision tree regressor
     """
 
@@ -230,7 +230,7 @@ def main():
 
     # TODO: Implement raster mosaicing using arcpy
     # convert numpy array to raster
-    results_raster = arcpy.NumpyArrayToRaster(result, value_to_nodata=0)
+    #results_raster = arcpy.NumpyArrayToRaster(result, value_to_nodata=0)
 
 if __name__ == "__main__":
     start = tm.time()
