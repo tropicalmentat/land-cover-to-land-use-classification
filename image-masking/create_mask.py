@@ -8,33 +8,20 @@ from gdalconst import *
 from subprocess import call
 
 
-def output_ds(out_array, img_params, fn='result.tif'):
-    # create output raster data-set
-    cols = img_params[0]
-    rows = img_params[1]
-    bands = img_params[2]
-    gt = img_params[3]
-    proj = img_params[4]
-    driver = gdal.GetDriverByName('GTiff')
-    driver.Register()
+def get_img_param(image_dataset):
+    cols = image_dataset.RasterXSize
+    rows = image_dataset.RasterYSize
+    num_bands = image_dataset.RasterCount
+    img_gt = image_dataset.GetGeoTransform()
+    img_proj = image_dataset.GetProjection()
+    img_driver = image_dataset.GetDriver()
 
-    out_ras = driver.Create(fn, cols, rows, bands, GDT_UInt16)
-    out_ras.SetGeoTransform(gt)
-    out_ras.SetProjection(proj)
+    img_params = [cols, rows, num_bands, img_gt, img_proj, img_driver]
 
-    for band in range(out_array.shape[2]):
-        out_band = out_ras.GetRasterBand(band+1)
-
-        out_band.WriteArray(out_array[:, :, band])
-
-        out_band.SetNoDataValue(0)
-        out_band.FlushCache()
-        out_band.GetStatistics(0, 1)
-
-    return
+    return img_params
 
 
-def rasterize_mask(src, geotrans, cols, rows):
+def rasterize_mask(src, img_param):
     """
     Converts polygons in .SHP file format into a raster geotiff.
     Uses parameters of the source image that the cloud formations were derived from.
@@ -44,14 +31,16 @@ def rasterize_mask(src, geotrans, cols, rows):
     :param rows: source image number of rows
     :return:
     """
-    # collect extent, resolution and geotrans, and proj of img to be masked
+    # collect columns, rows, extent, resolution and geotrans, and proj of img to be masked
+    cols = img_param[0]
+    rows = img_param[1]
+    geotrans = img_param[3]
+
+    # unpack geotransform parameters
     topleft_x = geotrans[0]
     topleft_y = geotrans[3]
     x = geotrans[1]
     y = geotrans[5]
-
-    #wgs84 = Proj(proj='latlong', ellps='WGS84')
-    #utm51n = Proj(proj='utm', zone=51, ellps='WGS84')
 
     # compute extents
     x_min = topleft_x
@@ -123,8 +112,6 @@ def mask_image(band_list, mask_band, img_params):
                     astype(np.uint16)
 
                 clear_pixels = novalue_mask * mask_array
-                #cp_shape = clear_pixels.shape
-                #print clear_pixels
 
                 out_band.WriteArray(clear_pixels, j, i)
 
@@ -133,7 +120,6 @@ def mask_image(band_list, mask_band, img_params):
         out_band.FlushCache()
         out_band.GetStatistics(0, 1)
 
-    #print mask_ds.shape
     return
 
 
@@ -156,21 +142,14 @@ def main():
         sys.exit(1)
 
     # TODO: automate data type assignment for output data-set
-    cols = img.RasterXSize
-    rows = img.RasterYSize
-    num_bands = img.RasterCount
-    img_gt = img.GetGeoTransform()
-    img_proj = img.GetProjection()
-    img_driver = img.GetDriver()
 
-    img_params = [cols, rows, num_bands, img_gt, img_proj, img_driver]
+    wv2_param = get_img_param(img)
 
-    #rasterize_mask(poly_fn, img_gt, cols, rows)
+    rasterize_mask(poly_fn, wv2_param)
 
     # collect all bands
     b_list = {}
-    for band in range(num_bands):
-        #pass
+    for band in range(wv2_param[2]):
         b_list[band+1] = img.GetRasterBand(band+1)
 
     # search for output mask from the previous step
@@ -178,7 +157,7 @@ def main():
     for f in glob.glob(cwd + '\*_mask.tif'):  # search for the .tif file of the mask
         mask_img = gdal.Open(f, GA_ReadOnly)
         band_mask = mask_img.GetRasterBand(1)
-        mask_image(b_list, band_mask, img_params)
+        mask_image(b_list, band_mask, wv2_param)
 
     print 'Processing time: %f' % (tm.time() - start)
 
