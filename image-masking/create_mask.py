@@ -1,6 +1,7 @@
 import sys
 import gdal
 import os
+import glob
 import time as tm
 import numpy as np
 from gdalconst import *
@@ -33,10 +34,9 @@ def output_ds(out_array, img_params, fn='result.tif'):
     return
 
 
-# rasterize cloud and shadow polygon
 def rasterize_mask(src, geotrans, cols, rows):
     """
-    Converts cloud formations in vector .SHP file format into a raster geotiff.
+    Converts polygons in .SHP file format into a raster geotiff.
     Uses parameters of the source image that the cloud formations were derived from.
     :param src: directory of source image
     :param geotrans: source image geotransform
@@ -59,7 +59,7 @@ def rasterize_mask(src, geotrans, cols, rows):
     x_max = topleft_x + x*cols
     y_max = topleft_y
 
-    out_fn = os.path.splitext(os.path.basename(src))[0] + '_cmask.tif'
+    out_fn = os.path.splitext(os.path.basename(src))[0] + '.tif'
 
     # gdal command construction from variables
     rasterize_cmd = ['gdal_rasterize',
@@ -79,7 +79,7 @@ def rasterize_mask(src, geotrans, cols, rows):
     return
 
 
-def mask_img(band_list, mask_band, img_params):
+def mask_image(band_list, mask_band, img_params):
 
     # create output raster data-set
     cols = img_params[0]
@@ -119,12 +119,12 @@ def mask_img(band_list, mask_band, img_params):
                 # mask the data-set
                 novalue_mask = np.where(band_ds == no_value, 0, band_ds) # set the no-value pixels to 0
 
-                cmask_array = mask_band.ReadAsArray(j, i, num_cols, num_rows).\
+                mask_array = mask_band.ReadAsArray(j, i, num_cols, num_rows).\
                     astype(np.uint16)
 
-                clear_pixels = novalue_mask * cmask_array
-                cp_shape = clear_pixels.shape
-                print clear_pixels
+                clear_pixels = novalue_mask * mask_array
+                #cp_shape = clear_pixels.shape
+                #print clear_pixels
 
                 out_band.WriteArray(clear_pixels, j, i)
 
@@ -141,8 +141,8 @@ def main():
     start = tm.time()
 
     # Worldview2
-    img_fn = "G:\LUIGI\ICLEI\IMAGE PROCESSING\\1a. IMAGE PREPROCESSING\WORKING FILES\\urban barangays\\naga_urb.tif"
-    poly_fn = "G:\LUIGI\ICLEI\IMAGE PROCESSING\\1a. IMAGE PREPROCESSING\WORKING FILES\\ps_clouds_urban.shp"
+    img_fn = "naga_urb.tif"
+    poly_fn = "river_cloud_mask.shp"
 
     # Landsat
     #img_fn = "G:\LUIGI\ICLEI\IMAGE PROCESSING\IMAGES\LC81140512014344LGN00\CLIP\LC81140512014344LGN00_BANDSTACK"
@@ -174,12 +174,11 @@ def main():
         b_list[band+1] = img.GetRasterBand(band+1)
 
     # search for output cloudmask from the previous step
-    for root, dirs, files in os.walk(os.getcwd()):
-        for f in files:
-            if 'cmask' in f:
-                cmask_img = gdal.Open(f, GA_ReadOnly)
-                band_mask = cmask_img.GetRasterBand(1)
-                mask_img(b_list, band_mask, img_params)
+    cwd = os.getcwd()
+    for f in glob.glob(cwd + '\*_mask.tif'):  # search for the .tif file of the mask
+        mask_img = gdal.Open(f, GA_ReadOnly)
+        band_mask = mask_img.GetRasterBand(1)
+        mask_image(b_list, band_mask, img_params)
 
     print 'Processing time: %f' % (tm.time() - start)
 
