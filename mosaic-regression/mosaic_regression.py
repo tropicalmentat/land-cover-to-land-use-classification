@@ -1,3 +1,7 @@
+# The following script was derived from the journal article
+# Cloud-Free Satellite Image Mosaics with
+# Regression Trees and Histogram Matching
+
 import gdal
 import arcpy
 import sys
