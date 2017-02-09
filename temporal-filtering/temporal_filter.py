@@ -119,6 +119,10 @@ def temporal_mask(X, Y):
     ndvi_1[ndvi_1 == -99.] = np.nan
     ndvi_2[ndvi_2 == -99.] = np.nan
 
+    # the number of valid elements for regression must be
+    # the same for both image arrays hence novalue
+    # masks of each image must be applied to other
+
     # apply novalue mask of image 2 to image 1
     ndvi_1_masked = np.where(np.isnan(ndvi_2), np.nan, ndvi_1)  # apply ndvi mask of 2nd image
     ndvi_1_flat = ndvi_1_masked[np.isnan(ndvi_1_masked)==False]
@@ -128,9 +132,11 @@ def temporal_mask(X, Y):
     ndvi_2_flat = ndvi_2_masked[np.isnan(ndvi_2_masked)==False]
 
     # random sample of pixels
-    sample_pixels = random.sample(zip(ndvi_1_flat, ndvi_2_flat), 3000)
+    sample_pixels = random.sample(zip(ndvi_1_flat, ndvi_2_flat), 3000)  # the sample size suggested by article
+
     list_x = []
     list_y = []
+
     for i in range(len(sample_pixels)):
         list_x.append(sample_pixels[i][0])
         list_y.append(sample_pixels[i][1])
@@ -152,7 +158,7 @@ def temporal_mask(X, Y):
     # plot
     fig, ax = plt.subplots()
     plt.title('NDVI Values of Worldview 2 and Landsat 8')
-    plt.plot(sample_x, sample_y, 'g.', sample_x, line, 'k-')
+    plt.plot(sample_x, sample_y, 'g.', sample_x, line, 'k--')
     ax.set_ylabel('NDVI Landsat8')
     ax.set_xlabel('Average NDVI Worldview2')
 
