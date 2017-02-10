@@ -11,7 +11,6 @@ import numpy as np
 import scipy
 import scipy.ndimage
 import scipy.stats
-import sklearn.linear_model as sklin
 import random
 from gdalconst import *
 from matplotlib import pyplot as plt
@@ -113,9 +112,11 @@ def output_ds(out_array, img_params, d_type=GDT_Unknown, fn='result.tif'):
 
 def downscale_image(hires_img, lores_param):
     """
-    The parameters from the low resolution image
-    are used to compute the extent and resolution
-    of the resampled data-set. 
+    Takes in a high resolution image and resamples it
+    to a lower resolution.
+    The parameters are taken from a low resolution
+    reference image that are used to compute the extent
+    and resolution of the resampled data-set.
     """
 
     # collect columns, rows, extent, resolution and geotrans, and proj of img to be masked
@@ -152,10 +153,29 @@ def downscale_image(hires_img, lores_param):
     return
 
 
-def temporal_mask(X, Y, X_img_param):
+def temporal_mask(X, Y, X_img_param):  # TODO: make save intermediate data to disk optional
     """
+    Masks out pixels that underwent change between
+    the capture dates of the image datasets.
     Assumes parameters are arrays of equal shape.
-    ---------------------------------------------
+    -------------------------------------------------
+    1. First apply masks of equal shape and elements
+    to the dependent and independent datasets.
+    2. Create training samples by random sampling the
+    dataset pair with an arbitrary sample size.
+    3. Generate model from the training samples.
+    4. Predict image from model using the pixels of the
+    independent dataset.
+    5. Generate residual image.
+    6. Compute the standard deviation of the residual image.
+    7. Generate and apply image mask by selecting pixels
+    from the masked original dependent variable.
+    -------------------------------------------------
+    The pixels that will be used for regression from
+    the training data must be carefully filtered.
+    Numerical nodata values from the GDAL image datasets
+    must be converted into NaN so that they do not
+    interfere with model training.
     """
 
     ndvi_1 = X.GetRasterBand(1).ReadAsArray(0, 0)  # wv2 ndvi
@@ -201,19 +221,9 @@ def temporal_mask(X, Y, X_img_param):
     print 'p value: %f' % p_value
     print 'error: %f' % std_err
 
-    # apply scikit linear regression to samples
-    # model = sklin.LinearRegression()
-    # fit = model.fit(training_sample_x, training_sample_y)
-    # print '\nslope: %f' % slope
-    # print 'intercept: %f' % intercept
-    # print 'R value: %f' % r_value
-    # print 'p value: %f' % p_value
-    # print 'error: %f' % std_err
-
-    # generate line for plotting
     model = slope * training_sample_x + intercept
 
-    # plot
+    # plot samples and regression line
     fig, ax = plt.subplots()
     plt.title('NDVI Values of Worldview 2 and Landsat 8')
     # plt.plot(training_sample_x, training_sample_y, 'g.', training_sample_x, model, 'k-', lw=2)
@@ -222,7 +232,6 @@ def temporal_mask(X, Y, X_img_param):
     ax.set_ylabel('NDVI Landsat8')
     ax.set_xlabel('Average NDVI Worldview2')
     plt.savefig('plot.png')
-    # plt.show()
 
     # predict landsat image from regression model
     predicted_image = slope * ndvi_1_masked + intercept
@@ -238,14 +247,19 @@ def temporal_mask(X, Y, X_img_param):
     print '\nstandard deviation of residual landsat image is: %f' % std_residual
 
     # generate mask by threshold
-    print 'thresholding landsat ndvi image with 2x the standard deviation of residual image...'
+    # set nodata value to 0 so that it does not interfere in the following step
+    residual_image[np.isnan(residual_image)] = 0.
     mask = np.where(np.less(residual_image, std_residual*1.75), np.array(1), np.array(0)).\
         astype(bool)
     output_ds(mask, X_img_param, GDT_Byte, 'mask.tif')
 
+    print 'thresholding landsat ndvi image with 2x the standard deviation of residual image...'
     # apply mask to first image
+
     ndvi_1_masked = np.where(mask == 1, ndvi_1_masked, np.nan)
     output_ds(ndvi_1_masked, X_img_param, GDT_Float32, 'landsat_ndvi_masked.tif')
+
+    # TODO: memory management
 
     return
 
