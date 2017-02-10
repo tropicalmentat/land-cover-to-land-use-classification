@@ -51,12 +51,42 @@ def get_img_param(image_dataset):
     return img_params
 
 
-def output_ds(out_array, img_params, fn='result.tif'):
+def output_ds(out_array, img_params, d_type=GDT_Unknown, fn='result.tif'):
     """
     Helper function.
     Writes new data-set into disk
     and saves output arrays in the data-set.
     """
+    gdal_data_types = [
+                GDT_Byte,
+                GDT_CFloat32,
+                GDT_CFloat64,
+                GDT_CInt16,
+                GDT_CInt32,
+                GDT_Float32,
+                GDT_Float64,
+                GDT_Int16,
+                GDT_Int32,
+                GDT_UInt16,
+                GDT_UInt32,
+                GDT_Unknown,
+                ]
+
+    numpy_data_types = [
+                        'bool',
+                        'int8',
+                        'int16',
+                        'int32',
+                        'int64',
+                        'uint8',
+                        'uint16',
+                        'uint32',
+                        'uint64',
+                        'float16',
+                        'float32',
+                        'float64'
+                        ]
+
     # create output raster data-set
     cols = img_params[0]
     rows = img_params[1]
@@ -66,7 +96,7 @@ def output_ds(out_array, img_params, fn='result.tif'):
     driver = gdal.GetDriverByName('GTiff')
     driver.Register()
 
-    out_ras = driver.Create(fn, cols, rows, bands, GDT_Float32)
+    out_ras = driver.Create(fn, cols, rows, bands, d_type)
     out_ras.SetGeoTransform(gt)
     out_ras.SetProjection(proj)
 
@@ -122,11 +152,12 @@ def downscale_image(hires_img, lores_param):
     return
 
 
-def temporal_mask(X, Y):
+def temporal_mask(X, Y, X_img_param):
     """
     Assumes parameters are arrays of equal shape.
     ---------------------------------------------
     """
+
     ndvi_1 = X.GetRasterBand(1).ReadAsArray(0, 0)  # wv2 ndvi
     ndvi_2 = Y.GetRasterBand(1).ReadAsArray(0, 0)  # landsat ndvi
 
@@ -178,27 +209,28 @@ def temporal_mask(X, Y):
     # print 'R value: %f' % r_value
     # print 'p value: %f' % p_value
     # print 'error: %f' % std_err
-    #
-    line = slope*training_sample_x + intercept
+
+    # generate line for plotting
+    model = slope * training_sample_x + intercept
 
     # plot
     fig, ax = plt.subplots()
     plt.title('NDVI Values of Worldview 2 and Landsat 8')
-    plt.plot(training_sample_x, training_sample_y, 'g.', training_sample_x, line, 'k--')
+    # plt.plot(training_sample_x, training_sample_y, 'g.', training_sample_x, model, 'k-', lw=2)
+    ax.scatter(training_sample_x, training_sample_y, color='g' , marker='.', alpha=.4)
+    plt.plot(training_sample_x, model, 'k-', lw=2)
     ax.set_ylabel('NDVI Landsat8')
     ax.set_xlabel('Average NDVI Worldview2')
+    plt.savefig('plot.png')
+    # plt.show()
 
-    plt.show()
-
-    # produce residual image
-    # by subtracting observed Landsat ndvi
-    # from Landsat ndvi predicted by regression
-
-    # predict landsat image from model
+    # predict landsat image from regression model
     predicted_image = slope * ndvi_1_masked + intercept
+    output_ds(predicted_image, X_img_param, GDT_Float32, 'predicted_ndvi.tif')
 
     # generate residual image
-    residual_image = ndvi_1_masked - predicted_image
+    residual_image = ndvi_2_masked - predicted_image
+    output_ds(residual_image, X_img_param, GDT_Float32, 'residual_image.tif')
 
     # compute standard deviation of residual image, ignoring nan values
     std_residual = np.nanstd(residual_image)
@@ -207,10 +239,15 @@ def temporal_mask(X, Y):
 
     # generate mask by threshold
     print 'thresholding landsat ndvi image with 2x the standard deviation of residual image...'
-    mask = np.where(np.less(residual_image,2 * std_residual),1, 0).\
+    mask = np.where(np.less(residual_image, std_residual*1.75), np.array(1), np.array(0)).\
         astype(bool)
+    output_ds(mask, X_img_param, GDT_Byte, 'mask.tif')
 
-    return mask
+    # apply mask to first image
+    ndvi_1_masked = np.where(mask == 1, ndvi_1_masked, np.nan)
+    output_ds(ndvi_1_masked, X_img_param, GDT_Float32, 'landsat_ndvi_masked.tif')
+
+    return
 
 
 def main():
@@ -228,8 +265,8 @@ def main():
     # print '\nWorldview2 image has: \n%d columns\n%d rows' % (wv2_param[0], wv2_param[1])
 
     # downscale wv2 image
-    #print '\nDownscaling...'
-    #downscale_image(wv2_dir, landsat_param)
+    # print '\nDownscaling...'
+    # downscale_image(wv2_dir, landsat_param)
 
     # collect ndvi images
     print '\nCreating temporal mask...'
@@ -241,9 +278,9 @@ def main():
         # Worldview2 pixels are the independent variables
         # Landsat pixels are the dependent variables
 
-    predicted_landsat = temporal_mask(wv2_resampled, landsat_img)
+    temporal_mask(wv2_resampled, landsat_img, landsat_param)
 
-    output_ds(predicted_landsat, landsat_param, 'mask.tif')
+    #output_ds(predicted_landsat, landsat_param, 'mask.tif')
 
     # create temporal mask
 
