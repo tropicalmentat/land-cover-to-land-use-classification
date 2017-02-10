@@ -171,11 +171,15 @@ def temporal_mask(X, Y, X_img_param):  # TODO: make save intermediate data to di
     7. Generate and apply image mask by selecting pixels
     from the masked original dependent variable.
     -------------------------------------------------
-    The pixels that will be used for regression from
-    the training data must be carefully filtered.
+    IMPORTANT NOTES: The pixels that will be used for
+    regression from the training data must be carefully
+    filtered.
     Numerical nodata values from the GDAL image datasets
     must be converted into NaN so that they do not
     interfere with model training.
+    This workflow was built for application to small landsat
+    datasets. Not recommended for full scenes of landsat or
+    higher resolution image datasets.
     """
 
     ndvi_1 = X.GetRasterBand(1).ReadAsArray(0, 0)  # wv2 ndvi
@@ -213,7 +217,7 @@ def temporal_mask(X, Y, X_img_param):  # TODO: make save intermediate data to di
     training_sample_x = np.array(training_list_x)
     training_sample_y = np.array(training_list_y)
 
-    # apply scipy linear regression to samples
+    # train linear regression model using samples
     slope, intercept, r_value, p_value, std_err = scipy.stats.linregress(training_sample_x, training_sample_y)
     print '\nslope: %f' % slope
     print 'intercept: %f' % intercept
