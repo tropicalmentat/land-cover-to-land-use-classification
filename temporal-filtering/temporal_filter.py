@@ -11,6 +11,7 @@ import numpy as np
 import scipy
 import scipy.ndimage
 import scipy.stats
+import sklearn.linear_model as sklin
 import random
 from gdalconst import *
 from matplotlib import pyplot as plt
@@ -141,41 +142,49 @@ def temporal_mask(X, Y):
     # masks of each image must be applied to other
 
     # apply novalue mask of image 2 to image 1
-    ndvi_1_masked = np.where(np.isnan(ndvi_2), np.nan, ndvi_1)  # apply ndvi mask of 2nd image
+    ndvi_1_masked = np.where(np.isnan(ndvi_2), np.nan, ndvi_1)  # apply novalue mask of 2nd image
     ndvi_1_flat = ndvi_1_masked[np.isnan(ndvi_1_masked)==False]
 
     # apply novalue mask of image 1 to image 2
-    ndvi_2_masked = np.where(np.isnan(ndvi_1), np.nan, ndvi_2)  # apply ndvi mask of 1st image
+    ndvi_2_masked = np.where(np.isnan(ndvi_1), np.nan, ndvi_2)  # apply novalue mask of 1st image
     ndvi_2_flat = ndvi_2_masked[np.isnan(ndvi_2_masked)==False]
 
     # random sample of pixels
     sample_pixels = random.sample(zip(ndvi_1_flat, ndvi_2_flat), 3000)  # the sample size suggested by article
 
-    list_x = []
-    list_y = []
+    training_list_x = []
+    training_list_y = []
 
     for i in range(len(sample_pixels)):
-        list_x.append(sample_pixels[i][0])
-        list_y.append(sample_pixels[i][1])
+        training_list_x.append(sample_pixels[i][0])
+        training_list_y.append(sample_pixels[i][1])
 
-    sample_x = np.array(list_x)
-    sample_y = np.array(list_y)
+    training_sample_x = np.array(training_list_x)
+    training_sample_y = np.array(training_list_y)
 
-    # TODO: use scikit learn instead of scipy
     # apply scipy linear regression to samples
-    slope, intercept, r_value, p_value, std_err = scipy.stats.linregress(sample_x, sample_y)
+    slope, intercept, r_value, p_value, std_err = scipy.stats.linregress(training_sample_x, training_sample_y)
     print '\nslope: %f' % slope
     print 'intercept: %f' % intercept
     print 'R value: %f' % r_value
     print 'p value: %f' % p_value
     print 'error: %f' % std_err
 
-    line = slope*sample_x + intercept
+    # apply scikit linear regression to samples
+    # model = sklin.LinearRegression()
+    # fit = model.fit(training_sample_x, training_sample_y)
+    # print '\nslope: %f' % slope
+    # print 'intercept: %f' % intercept
+    # print 'R value: %f' % r_value
+    # print 'p value: %f' % p_value
+    # print 'error: %f' % std_err
+    #
+    line = slope*training_sample_x + intercept
 
     # plot
     fig, ax = plt.subplots()
     plt.title('NDVI Values of Worldview 2 and Landsat 8')
-    plt.plot(sample_x, sample_y, 'g.', sample_x, line, 'k--')
+    plt.plot(training_sample_x, training_sample_y, 'g.', training_sample_x, line, 'k--')
     ax.set_ylabel('NDVI Landsat8')
     ax.set_xlabel('Average NDVI Worldview2')
 
@@ -185,9 +194,23 @@ def temporal_mask(X, Y):
     # by subtracting observed Landsat ndvi
     # from Landsat ndvi predicted by regression
 
-    # TODO: predict landsat ndvi from model
+    # predict landsat image from model
+    predicted_image = slope * ndvi_1_masked + intercept
 
-    return
+    # generate residual image
+    residual_image = ndvi_1_masked - predicted_image
+
+    # compute standard deviation of residual image, ignoring nan values
+    std_residual = np.nanstd(residual_image)
+
+    print '\nstandard deviation of residual landsat image is: %f' % std_residual
+
+    # generate mask by threshold
+    print 'thresholding landsat ndvi image with 2x the standard deviation of residual image...'
+    mask = np.where(np.less(residual_image,2 * std_residual),1, 0).\
+        astype(bool)
+
+    return mask
 
 
 def main():
@@ -211,12 +234,16 @@ def main():
     # collect ndvi images
     print '\nCreating temporal mask...'
     cwd = os.getcwd()
+    wv2_resampled = None
     for f in glob.glob(cwd + '\*_resampled.tif'):  # search for the resampled wv2 ndvi file
         wv2_resampled = gdal.Open(f, GA_ReadOnly)
 
         # Worldview2 pixels are the independent variables
         # Landsat pixels are the dependent variables
-        temporal_mask(wv2_resampled, landsat_img)
+
+    predicted_landsat = temporal_mask(wv2_resampled, landsat_img)
+
+    output_ds(predicted_landsat, landsat_param, 'mask.tif')
 
     # create temporal mask
 
