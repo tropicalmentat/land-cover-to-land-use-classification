@@ -22,6 +22,11 @@ io.use_plugin('matplotlib')
 
 
 def open_image(directory):
+    """
+    Helper function.
+    Opens image and returns
+    gdal MajorObject
+    """
     image_ds = gdal.Open(directory, GA_ReadOnly)
 
     if image_ds is None:
@@ -32,6 +37,11 @@ def open_image(directory):
 
 
 def get_img_param(image_dataset):
+    """
+    Helper function.
+    Collects image parameters
+    returns them as a list.
+    """
     cols = image_dataset.RasterXSize
     rows = image_dataset.RasterYSize
     num_bands = image_dataset.RasterCount
@@ -93,14 +103,14 @@ def mask_dataset(img_ds, mask_ds, b_count):
 
 def pixels_to_predict(img_ds, mask_1, mask_2, b_count):
     """
-    mask subject scene with its cloud/shadow mask and
-    the inverse of the ref scene cloud/shadow mask
+    Masks subject scene with its cloud/shadow mask and
+    the inverse of the reference scene cloud/shadow mask.
     """
 
     sub_mask = mask_1.GetRasterBand(1).ReadAsArray(0, 0)
     ref_mask = mask_2.GetRasterBand(1).ReadAsArray(0, 0)
 
-    inverse_mask_2 = np.where(ref_mask == 1, 0, 1)
+    inverse_mask_2 = np.where(ref_mask == 1, np.array(0), np.array(1))
     new_mask = sub_mask * inverse_mask_2
 
     masked_bands = []
@@ -160,6 +170,12 @@ def apply_regression(predict_pix, regressor):
 
 
 def output_ds(out_array, img_params, fn='result.tif'):
+    """
+    Helper function.
+    Writes new data-set into disk
+    and saves output arrays in the data-set.
+    """
+
     # create output raster data-set
     cols = img_params[0]
     rows = img_params[1]
