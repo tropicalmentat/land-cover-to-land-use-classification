@@ -63,7 +63,7 @@ def rasterize_mask(src, img_param):
     return
 
 
-def mask_image(band_list, mask_band, img_params):
+def mask_image(band_list, mask_band, img_params, out_fn='result.tif'):
 
     # create output raster data-set
     cols = img_params[0]
@@ -73,7 +73,7 @@ def mask_image(band_list, mask_band, img_params):
     proj = img_params[4]
     driver = img_params[5]
 
-    out_ras = driver.Create('naga_urban_masked.tif', cols, rows, bands, GDT_UInt16)
+    out_ras = driver.Create(out_fn, cols, rows, bands, GDT_UInt16)
     out_ras.SetGeoTransform(gt)
     out_ras.SetProjection(proj)
 
@@ -101,12 +101,11 @@ def mask_image(band_list, mask_band, img_params):
                     astype(np.uint16)
 
                 # mask the data-set
-                novalue_mask = np.where(band_ds == no_value, 0, band_ds) # set the no-value pixels to 0
 
                 mask_array = mask_band.ReadAsArray(j, i, num_cols, num_rows).\
                     astype(np.uint16)
 
-                clear_pixels = novalue_mask * mask_array
+                clear_pixels = np.where(mask_array == 0, np.array(0), band_ds)
 
                 out_band.WriteArray(clear_pixels, j, i)
 
@@ -122,8 +121,8 @@ def main():
     start = tm.time()
 
     # Worldview2
-    img_fn = "naga_urb.tif"
-    poly_fn = "river_cloud_mask.shp"
+    img_fn = "G:\LUIGI\ICLEI\IMAGE PROCESSING\\1a. IMAGE PREPROCESSING\WORKING FILES\\naga_urban.tif"
+    poly_fn = "G:\LUIGI\ICLEI\IMAGE PROCESSING\\1a. IMAGE PREPROCESSING\WORKING FILES\digitized image features\\urban_mask.shp"
 
     # Landsat
     #img_fn = "G:\LUIGI\ICLEI\IMAGE PROCESSING\IMAGES\LC81140512014344LGN00\CLIP\LC81140512014344LGN00_BANDSTACK"
@@ -152,7 +151,7 @@ def main():
     for f in glob.glob(cwd + '\*_mask.tif'):  # search for the .tif file of the mask
         mask_img = gdal.Open(f, GA_ReadOnly)
         band_mask = mask_img.GetRasterBand(1)
-        mask_image(b_list, band_mask, wv2_param)
+        mask_image(b_list, band_mask, wv2_param, 'urban_masked.tif')
 
     print 'Processing time: %f' % (tm.time() - start)
 
