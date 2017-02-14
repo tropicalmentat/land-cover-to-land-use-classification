@@ -201,6 +201,15 @@ def output_ds(out_array, img_params, fn='result.tif'):
     return
 
 
+def histogram_match():
+    """
+    Referenced from
+    http://stackoverflow.com/questions/32655686/histogram-matching-of-two-images-in-python-2-x
+    :return:
+    """
+    pass
+
+
 def main():
 
     # Open subject and reference scenes and their corresponding

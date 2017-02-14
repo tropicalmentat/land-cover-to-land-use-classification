@@ -129,6 +129,9 @@ def compress_image(fn, out_fn='compressed.tif'):
     """
     Compresses a geotiff image.
     Referenced from http://www.digital-geography.com/geotiff-compression-comparison/
+    and
+    http://gis.stackexchange.com/questions/1104/
+    should-gdal-be-set-to-produce-geotiff-files-with-compression-which-algorithm-sh
     """
     compress_cmd = ['gdal_translate',
                      '-of', 'GTiff',
