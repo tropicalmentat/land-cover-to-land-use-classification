@@ -91,14 +91,14 @@ def compute_ndvi(image, img_params, ir=3, nir=4, fn='ndvi.tif'):
 
 def main():
     # open Worldview2 pansharpened image
-    wv2_dir = "naga_urban_masked.tif"
+    wv2_dir = "urban_barangays.tif"
     wv2_img = open_image(wv2_dir)
 
     # retrieve Worldview2 image parameters
     wv2_param = get_img_param(wv2_img)
 
     # compute Worldview2 ndvi
-    compute_ndvi(wv2_img, wv2_param, ir=3, nir=4, fn='wv2_ndvi.tif')
+    compute_ndvi(wv2_img, wv2_param, ir=3, nir=4, fn='urban_ndvi.tif')
 
     # open Landsat multispectral image
     landsat_dir = "landsat_urban.tif"
@@ -108,7 +108,7 @@ def main():
     landsat_param = get_img_param(landsat_img)
 
     # compute Landsat ndvi
-    compute_ndvi(landsat_img, landsat_param, ir=4, nir=5, fn='landsat_ndvi.tif')
+    compute_ndvi(landsat_img, landsat_param, ir=4, nir=5, fn='landsat_urban_ndvi.tif')
 
 
 if __name__ == "__main__":
