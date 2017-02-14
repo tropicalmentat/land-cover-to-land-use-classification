@@ -103,7 +103,7 @@ def output_ds(out_array, img_params, d_type=GDT_Unknown, fn='result.tif'):
 
     out_band.WriteArray(out_array)
 
-    out_band.SetNoDataValue(0)
+    out_band.SetNoDataValue(-99.)
     out_band.FlushCache()
     out_band.GetStatistics(0, 1)
 
@@ -153,7 +153,7 @@ def downscale_image(hires_img, lores_param):
     return
 
 
-def temporal_mask(X, Y, X_img_param):  # TODO: make save intermediate data to disk optional
+def temporal_mask(X, Y, X_img_param, data_to_disk=True):  # TODO: Find a way to iterate the entire process
     """
     Masks out pixels that underwent change between
     the capture dates of the image datasets.
@@ -231,19 +231,22 @@ def temporal_mask(X, Y, X_img_param):  # TODO: make save intermediate data to di
     fig, ax = plt.subplots()
     plt.title('NDVI Values of Worldview 2 and Landsat 8')
     # plt.plot(training_sample_x, training_sample_y, 'g.', training_sample_x, model, 'k-', lw=2)
-    ax.scatter(training_sample_x, training_sample_y, color='g' , marker='.', alpha=.4)
+    ax.scatter(training_sample_x, training_sample_y, c='g' , marker='.', alpha=.4)
     plt.plot(training_sample_x, model, 'k-', lw=2)
     ax.set_ylabel('NDVI Landsat8')
     ax.set_xlabel('Average NDVI Worldview2')
+    #ax.text(0.0, 0.6, 'x')
     plt.savefig('plot.png')
 
     # predict landsat image from regression model
     predicted_image = slope * ndvi_1_masked + intercept
-    output_ds(predicted_image, X_img_param, GDT_Float32, 'predicted_ndvi.tif')
+    if data_to_disk == True:
+        output_ds(predicted_image, X_img_param, GDT_Float32, 'predicted_ndvi.tif')
 
     # generate residual image
     residual_image = ndvi_2_masked - predicted_image
-    output_ds(residual_image, X_img_param, GDT_Float32, 'residual_image.tif')
+    if data_to_disk == True:
+        output_ds(residual_image, X_img_param, GDT_Float32, 'residual_image.tif')
 
     # compute standard deviation of residual image, ignoring nan values
     std_residual = np.nanstd(residual_image)
@@ -251,27 +254,40 @@ def temporal_mask(X, Y, X_img_param):  # TODO: make save intermediate data to di
     print '\nstandard deviation of residual landsat image is: %f' % std_residual
 
     # generate mask by threshold
-    # set nodata value to 0 so that it does not interfere in the following step
+    # set nodata value to 0 in the residual image so that it does not interfere in the following step
     residual_image[np.isnan(residual_image)] = 0.
     mask = np.where(np.less(residual_image, std_residual*1.75), np.array(1), np.array(0)).\
         astype(bool)
-    output_ds(mask, X_img_param, GDT_Byte, 'mask.tif')
+    if data_to_disk == True:
+        output_ds(mask, X_img_param, GDT_Byte, 'mask.tif')
 
     print 'thresholding landsat ndvi image with 2x the standard deviation of residual image...'
-    # apply mask to first image
 
-    ndvi_1_masked = np.where(mask == 1, ndvi_1_masked, np.nan)
-    output_ds(ndvi_1_masked, X_img_param, GDT_Float32, 'landsat_ndvi_masked.tif')
+    # apply mask to dependent variable
+    ndvi_2_masked = np.where(mask == 1, ndvi_2_masked, np.nan)
+    output_ds(ndvi_2_masked, X_img_param, GDT_Float32, 'landsat_ndvi_masked.tif')
 
-    # TODO: memory management
+    # close image array datasets
+    ndvi_1 = None
+    ndvi_2 = None
+    ndvi_1_flat = None
+    ndvi_2_flat = None
+    ndvi_1_masked = None
+    ndvi_2_masked = None
+    sample_pixels = None
+    training_sample_x = None
+    training_sample_y = None
+    predicted_image = None
+    residual_image = None
+    mask = None
 
     return
 
 
 def main():
     # Open Landsat and WV2 ndvi images
-    landsat_dir = "landsat_ndvi.tif"
-    wv2_dir = "wv2_ndvi.tif"
+    landsat_dir = "landsat_urban_ndvi.tif"
+    wv2_dir = "urban_ndvi.tif"
 
     landsat_img = open_image(landsat_dir)
     wv2_img = open_image(wv2_dir)
@@ -283,11 +299,11 @@ def main():
     # print '\nWorldview2 image has: \n%d columns\n%d rows' % (wv2_param[0], wv2_param[1])
 
     # downscale wv2 image
-    # print '\nDownscaling...'
-    # downscale_image(wv2_dir, landsat_param)
+    print '\nDownscaling...'
+    downscale_image(wv2_dir, landsat_param)
 
     # collect ndvi images
-    print '\nCreating temporal mask...'
+
     cwd = os.getcwd()
     wv2_resampled = None
     for f in glob.glob(cwd + '\*_resampled.tif'):  # search for the resampled wv2 ndvi file
@@ -296,9 +312,23 @@ def main():
         # Worldview2 pixels are the independent variables
         # Landsat pixels are the dependent variables
 
-    temporal_mask(wv2_resampled, landsat_img, landsat_param)
+    temporal_mask(wv2_resampled, landsat_img, landsat_param, data_to_disk=False)
 
-    #output_ds(predicted_landsat, landsat_param, 'mask.tif')
+    # 2nd run
+    # ndvi_masked = None
+    # for f in glob.glob(cwd + '\*ndvi_masked.tif'):
+    #     #print f
+    #     ndvi_masked = gdal.Open(f, GA_ReadOnly)
+
+    #temporal_mask(wv2_resampled, ndvi_masked, landsat_param, data_to_disk=False)
+
+    # 3rd run
+    # ndvi_masked = None
+    # for f in glob.glob(cwd + '\*ndvi_masked2.tif'):
+    #     # print f
+    #     ndvi_masked = gdal.Open(f, GA_ReadOnly)
+    #
+    # temporal_mask(wv2_resampled, ndvi_masked, landsat_param, data_to_disk=False)
 
     # create temporal mask
 
