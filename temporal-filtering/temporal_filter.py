@@ -153,11 +153,13 @@ def downscale_image(hires_img, lores_param):
     return
 
 
-def temporal_mask(X, Y, X_img_param, data_to_disk=True):  # TODO: Find a way to iterate the entire process
+def temporal_mask(X, Y, Y_img_param, data_to_disk=True):  # TODO: Find a way to iterate the entire process
     """
-    Masks out pixels that underwent change between
-    the capture dates of the image datasets.
-    Assumes parameters are arrays of equal shape.
+    Masks out Normalized Vegetation Difference Index (NDVI)
+    pixels that underwent change between the capture dates
+    of the image datasets.
+    The independent variable, X, is an NDVI image array that
+    underwent resampling using gdal_warp resampling algorithm
     -------------------------------------------------
     1. First apply masks of equal shape and elements
     to the dependent and independent datasets.
@@ -180,28 +182,42 @@ def temporal_mask(X, Y, X_img_param, data_to_disk=True):  # TODO: Find a way to 
     This workflow was built for application to small landsat
     datasets. Not recommended for full scenes of landsat or
     higher resolution image datasets.
+    -------------------------------------------------
+    PARAMETERS
+    X - independent variable, numpy array with n-dimensions
+    Y - dependent variable, numpy array with n-dimensions
+    X and Y must have the same shape
+
+    Y_img_param - image parameters, for saving Gtiff to disks
+
+    data_to_disk - bool, optional parameter for saving
+    intermediate data to disk
     """
 
-    ndvi_1 = X.GetRasterBand(1).ReadAsArray(0, 0)  # wv2 ndvi
+    ndvi_1 = X.GetRasterBand(1).ReadAsArray(0, 0)  # resampled worldview2 ndvi
     ndvi_2 = Y.GetRasterBand(1).ReadAsArray(0, 0)  # landsat ndvi
-
-    # no value elements interfere with the regression
-    # so they need to be masked out by
+    # TODO begin iteration here
+    # if no value elements are numerical the will
+    # interfere with the regression
+    # they need to be masked out by
     # converting them to nan
-    # they must not be converted into a number
     ndvi_1[ndvi_1 == -99.] = np.nan
     ndvi_2[ndvi_2 == -99.] = np.nan
 
-    # the number of valid elements for regression must be
+    # the number of numerical elements for regression must be
     # the same for both image arrays hence novalue
     # masks of each image must be applied to other
-
-    # apply novalue mask of image 2 to image 1
+    # the resulting arrays will have the same shape
     ndvi_1_masked = np.where(np.isnan(ndvi_2), np.nan, ndvi_1)  # apply novalue mask of 2nd image
+
+    # return pixels that to be used as the independent
+    # variables for regression
     ndvi_1_flat = ndvi_1_masked[np.isnan(ndvi_1_masked)==False]
 
-    # apply novalue mask of image 1 to image 2
     ndvi_2_masked = np.where(np.isnan(ndvi_1), np.nan, ndvi_2)  # apply novalue mask of 1st image
+
+    # return pixels that to be used as the dependent
+    # variables for regression
     ndvi_2_flat = ndvi_2_masked[np.isnan(ndvi_2_masked)==False]
 
     # random sample of pixels
@@ -235,18 +251,19 @@ def temporal_mask(X, Y, X_img_param, data_to_disk=True):  # TODO: Find a way to 
     plt.plot(training_sample_x, model, 'k-', lw=2)
     ax.set_ylabel('NDVI Landsat8')
     ax.set_xlabel('Average NDVI Worldview2')
-    #ax.text(0.0, 0.6, 'x')
+    ax.text(0.0, 0.6, str(slope)+'x' + ' + ' + str(intercept))
+    ax.text(0.0, 0.55, str(r_value))
     plt.savefig('plot.png')
 
     # predict landsat image from regression model
     predicted_image = slope * ndvi_1_masked + intercept
     if data_to_disk == True:
-        output_ds(predicted_image, X_img_param, GDT_Float32, 'predicted_ndvi.tif')
+        output_ds(predicted_image, Y_img_param, GDT_Float32, 'predicted_ndvi.tif')
 
     # generate residual image
     residual_image = ndvi_2_masked - predicted_image
     if data_to_disk == True:
-        output_ds(residual_image, X_img_param, GDT_Float32, 'residual_image.tif')
+        output_ds(residual_image, Y_img_param, GDT_Float32, 'residual_image.tif')
 
     # compute standard deviation of residual image, ignoring nan values
     std_residual = np.nanstd(residual_image)
@@ -259,13 +276,15 @@ def temporal_mask(X, Y, X_img_param, data_to_disk=True):  # TODO: Find a way to 
     mask = np.where(np.less(residual_image, std_residual*1.75), np.array(1), np.array(0)).\
         astype(bool)
     if data_to_disk == True:
-        output_ds(mask, X_img_param, GDT_Byte, 'mask.tif')
+        output_ds(mask, Y_img_param, GDT_Byte, 'mask.tif')
 
     print 'thresholding landsat ndvi image with 2x the standard deviation of residual image...'
 
-    # apply mask to dependent variable
-    ndvi_2_masked = np.where(mask == 1, ndvi_2_masked, np.nan)
-    output_ds(ndvi_2_masked, X_img_param, GDT_Float32, 'landsat_ndvi_masked.tif')
+    # apply the temporal mask to dependent variable pixel array
+    # prior to masking since the no value masks
+    # were only needed for regression
+    ndvi_2 = np.where(mask == 1, ndvi_2, np.nan)
+    output_ds(ndvi_2, Y_img_param, GDT_Float32, 'landsat_ndvi_masked.tif')
 
     # close image array datasets
     ndvi_1 = None
@@ -309,9 +328,8 @@ def main():
     for f in glob.glob(cwd + '\*_resampled.tif'):  # search for the resampled wv2 ndvi file
         wv2_resampled = gdal.Open(f, GA_ReadOnly)
 
-        # Worldview2 pixels are the independent variables
-        # Landsat pixels are the dependent variables
-
+    # Worldview2 pixels are the independent variables
+    # Landsat pixels are the dependent variables
     temporal_mask(wv2_resampled, landsat_img, landsat_param, data_to_disk=False)
 
     # 2nd run
