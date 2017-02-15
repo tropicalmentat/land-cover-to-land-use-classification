@@ -246,23 +246,22 @@ def temporal_mask(X, Y, Y_img_param, data_to_disk=True):  # TODO: Find a way to 
     # plot samples and regression line
     fig, ax = plt.subplots()
     plt.title('NDVI Values of Worldview 2 and Landsat 8')
-    # plt.plot(training_sample_x, training_sample_y, 'g.', training_sample_x, model, 'k-', lw=2)
     ax.scatter(training_sample_x, training_sample_y, c='g' , marker='.', alpha=.4)
     plt.plot(training_sample_x, model, 'k-', lw=2)
     ax.set_ylabel('NDVI Landsat8')
     ax.set_xlabel('Average NDVI Worldview2')
-    ax.text(0.0, 0.6, str(slope)+'x' + ' + ' + str(intercept))
-    ax.text(0.0, 0.55, str(r_value))
+    ax.text(0.0, 0.6, "{:.6f}".format(slope)+'$x$' + ' + ' + "{:.6f}".format(intercept))
+    ax.text(0.0, 0.55,"$r^2$" + " = " + "{:.6f}".format(r_value))
     plt.savefig('plot.png')
 
     # predict landsat image from regression model
     predicted_image = slope * ndvi_1_masked + intercept
-    if data_to_disk == True:
+    if data_to_disk:
         output_ds(predicted_image, Y_img_param, GDT_Float32, 'predicted_ndvi.tif')
 
     # generate residual image
     residual_image = ndvi_2_masked - predicted_image
-    if data_to_disk == True:
+    if data_to_disk:
         output_ds(residual_image, Y_img_param, GDT_Float32, 'residual_image.tif')
 
     # compute standard deviation of residual image, ignoring nan values
@@ -271,11 +270,12 @@ def temporal_mask(X, Y, Y_img_param, data_to_disk=True):  # TODO: Find a way to 
     print '\nstandard deviation of residual landsat image is: %f' % std_residual
 
     # generate mask by threshold
-    # set nodata value to 0 in the residual image so that it does not interfere in the following step
+    # set nodata value to 0 in the residual image so that
+    # it does not interfere in the following step
     residual_image[np.isnan(residual_image)] = 0.
     mask = np.where(np.less(residual_image, std_residual*1.75), np.array(1), np.array(0)).\
         astype(bool)
-    if data_to_disk == True:
+    if data_to_disk:
         output_ds(mask, Y_img_param, GDT_Byte, 'mask.tif')
 
     print 'thresholding landsat ndvi image with 2x the standard deviation of residual image...'
