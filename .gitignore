@@ -30,6 +30,4 @@ IMAGES/WORLDVIEW 2/WORKING FILES/pansharp_ground_control.txt
 *.lyr
 *.evf
 *.vrt
-*IMAGES
-*1a. IMAGE PREPROCESSING
-*1b. LAND COVER CLASSIFICATION
+*.png
