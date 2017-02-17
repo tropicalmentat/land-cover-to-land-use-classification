@@ -11,6 +11,7 @@ import numpy as np
 import scipy
 import scipy.ndimage
 import scipy.stats
+from skimage import morphology as morph
 import random
 from gdalconst import *
 from matplotlib import pyplot as plt
@@ -153,7 +154,7 @@ def downscale_image(hires_img, lores_param):
     return
 
 
-def temporal_mask(X, Y, Y_img_param, data_to_disk=True):  # TODO: Find a way to iterate the entire process
+def temporal_mask(X, Y, Y_img_param, data_to_disk=True):  # TODO function does too many things, refactor it
     """
     Masks out Normalized Vegetation Difference Index (NDVI)
     pixels that underwent change between the capture dates
@@ -196,7 +197,7 @@ def temporal_mask(X, Y, Y_img_param, data_to_disk=True):  # TODO: Find a way to 
 
     ndvi_1 = X.GetRasterBand(1).ReadAsArray(0, 0)  # resampled worldview2 ndvi
     ndvi_2 = Y.GetRasterBand(1).ReadAsArray(0, 0)  # landsat ndvi
-    # TODO begin iteration here
+
     # if no value elements are numerical the will
     # interfere with the regression
     # they need to be masked out by
@@ -209,15 +210,10 @@ def temporal_mask(X, Y, Y_img_param, data_to_disk=True):  # TODO: Find a way to 
     # masks of each image must be applied to other
     # the resulting arrays will have the same shape
     ndvi_1_masked = np.where(np.isnan(ndvi_2), np.nan, ndvi_1)  # apply novalue mask of 2nd image
-
-    # return pixels that to be used as the independent
-    # variables for regression
-    ndvi_1_flat = ndvi_1_masked[np.isnan(ndvi_1_masked)==False]
-
     ndvi_2_masked = np.where(np.isnan(ndvi_1), np.nan, ndvi_2)  # apply novalue mask of 1st image
 
-    # return pixels that to be used as the dependent
-    # variables for regression
+    # flattened arrays independent and dependent variables for regression
+    ndvi_1_flat = ndvi_1_masked[np.isnan(ndvi_1_masked)==False]
     ndvi_2_flat = ndvi_2_masked[np.isnan(ndvi_2_masked)==False]
 
     # random sample of pixels
@@ -250,8 +246,8 @@ def temporal_mask(X, Y, Y_img_param, data_to_disk=True):  # TODO: Find a way to 
     plt.plot(training_sample_x, model, 'k-', lw=2)
     ax.set_ylabel('NDVI Landsat8')
     ax.set_xlabel('Average NDVI Worldview2')
-    ax.text(0.0, 0.6, "{:.6f}".format(slope)+'$x$' + ' + ' + "{:.6f}".format(intercept))
-    ax.text(0.0, 0.55,"$r^2$" + " = " + "{:.6f}".format(r_value))
+    ax.text(0.0, 0.6, "${:.6f}$".format(slope)+'$x$' + ' $+$ ' + "${:.6f}$".format(intercept))
+    ax.text(0.0, 0.55,"$r^2$" + " = " + "${:.6f}$".format(r_value))
     plt.savefig('plot.png')
 
     # predict landsat image from regression model
@@ -275,30 +271,33 @@ def temporal_mask(X, Y, Y_img_param, data_to_disk=True):  # TODO: Find a way to 
     residual_image[np.isnan(residual_image)] = 0.
     mask = np.where(np.less(residual_image, std_residual*1.75), np.array(1), np.array(0)).\
         astype(bool)
+
+    # apply a morphological filter to the mask to remove salt and pepper effect
+    morph_mask = morph.binary_closing(mask)
     if data_to_disk:
-        output_ds(mask, Y_img_param, GDT_Byte, 'mask.tif')
+        output_ds(morph_mask, Y_img_param, GDT_Byte, 'mask.tif')
 
     print 'thresholding landsat ndvi image with 2x the standard deviation of residual image...'
 
     # apply the temporal mask to dependent variable pixel array
     # prior to masking since the no value masks
     # were only needed for regression
-    ndvi_2 = np.where(mask == 1, ndvi_2, np.nan)
+    ndvi_2 = np.where(morph_mask== 1, ndvi_2, np.nan)
     output_ds(ndvi_2, Y_img_param, GDT_Float32, 'landsat_ndvi_masked.tif')
 
     # close image array datasets
-    ndvi_1 = None
-    ndvi_2 = None
-    ndvi_1_flat = None
-    ndvi_2_flat = None
-    ndvi_1_masked = None
-    ndvi_2_masked = None
-    sample_pixels = None
-    training_sample_x = None
-    training_sample_y = None
-    predicted_image = None
-    residual_image = None
-    mask = None
+    # ndvi_1 = None
+    # ndvi_2 = None
+    # ndvi_1_flat = None
+    # ndvi_2_flat = None
+    # ndvi_1_masked = None
+    # ndvi_2_masked = None
+    # sample_pixels = None
+    # training_sample_x = None
+    # training_sample_y = None
+    # predicted_image = None
+    # residual_image = None
+    # mask = None
 
     return
 
