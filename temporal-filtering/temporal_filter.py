@@ -11,12 +11,12 @@ import numpy as np
 import scipy
 import scipy.ndimage
 import scipy.stats
-from skimage import morphology as morph
 import random
+import matplotlib.mlab as mlab
 from gdalconst import *
 from matplotlib import pyplot as plt
 from subprocess import call
-
+from skimage import morphology as morph
 
 def open_image(directory):
     """
@@ -260,6 +260,11 @@ def temporal_mask(X, Y, Y_img_param, data_to_disk=True):  # TODO function does t
     if data_to_disk:
         output_ds(residual_image, Y_img_param, GDT_Float32, 'residual_image.tif')
 
+    # plot histogram of residual image
+    # r = residual_image[np.isnan(residual_image)==False]
+    # n, bins, patches = plt.hist(r, bins=1000)
+    # plt.show()
+
     # compute standard deviation of residual image, ignoring nan values
     std_residual = np.nanstd(residual_image)
 
@@ -269,15 +274,16 @@ def temporal_mask(X, Y, Y_img_param, data_to_disk=True):  # TODO function does t
     # set nodata value to 0 in the residual image so that
     # it does not interfere in the following step
     residual_image[np.isnan(residual_image)] = 0.
-    mask = np.where(np.less(residual_image, std_residual*1.75), np.array(1), np.array(0)).\
-        astype(bool)
+
+    mask = np.where((residual_image > -std_residual*1.5) & (residual_image < std_residual*1.5),
+                    np.array(1), np.array(0)).astype(bool)
 
     # apply a morphological filter to the mask to remove salt and pepper effect
     morph_mask = morph.binary_closing(mask)
     if data_to_disk:
         output_ds(morph_mask, Y_img_param, GDT_Byte, 'mask.tif')
 
-    print 'thresholding landsat ndvi image with 2x the standard deviation of residual image...'
+    print 'thresholding landsat ndvi image with 1.25x the standard deviation of residual image: %f' % (std_residual*2)
 
     # apply the temporal mask to dependent variable pixel array
     # prior to masking since the no value masks
@@ -329,25 +335,8 @@ def main():
 
     # Worldview2 pixels are the independent variables
     # Landsat pixels are the dependent variables
-    temporal_mask(wv2_resampled, landsat_img, landsat_param, data_to_disk=False)
+    temporal_mask(wv2_resampled, landsat_img, landsat_param, False)
 
-    # 2nd run
-    # ndvi_masked = None
-    # for f in glob.glob(cwd + '\*ndvi_masked.tif'):
-    #     #print f
-    #     ndvi_masked = gdal.Open(f, GA_ReadOnly)
-
-    #temporal_mask(wv2_resampled, ndvi_masked, landsat_param, data_to_disk=False)
-
-    # 3rd run
-    # ndvi_masked = None
-    # for f in glob.glob(cwd + '\*ndvi_masked2.tif'):
-    #     # print f
-    #     ndvi_masked = gdal.Open(f, GA_ReadOnly)
-    #
-    # temporal_mask(wv2_resampled, ndvi_masked, landsat_param, data_to_disk=False)
-
-    # create temporal mask
 
 if __name__ == "__main__":
     start = tm.time()
