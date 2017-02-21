@@ -154,7 +154,7 @@ def downscale_image(hires_img, lores_param):
     return
 
 
-def temporal_mask(X, Y, Y_img_param, data_to_disk=True):  # TODO function does too many things, refactor it
+def temporal_mask(X, Y, Y_img_param, data_to_disk=True, iter=1, std_mult=2.0):  # TODO function does too many things, refactor it
     """
     Masks out Normalized Vegetation Difference Index (NDVI)
     pixels that underwent change between the capture dates
@@ -193,6 +193,12 @@ def temporal_mask(X, Y, Y_img_param, data_to_disk=True):  # TODO function does t
 
     data_to_disk - bool, optional parameter for saving
     intermediate data to disk
+
+    iter - integer, optional number of regression iterations
+    to be performed
+
+    std_mult - float, standard deviation multiplier for
+    residual pixel masking range
     """
 
     ndvi_1 = X.GetRasterBand(1).ReadAsArray(0, 0)  # resampled worldview2 ndvi
@@ -205,90 +211,100 @@ def temporal_mask(X, Y, Y_img_param, data_to_disk=True):  # TODO function does t
     ndvi_1[ndvi_1 == -99.] = np.nan
     ndvi_2[ndvi_2 == -99.] = np.nan
 
-    # the number of numerical elements for regression must be
-    # the same for both image arrays hence novalue
-    # masks of each image must be applied to other
-    # the resulting arrays will have the same shape
-    ndvi_1_masked = np.where(np.isnan(ndvi_2), np.nan, ndvi_1)  # apply novalue mask of 2nd image
-    ndvi_2_masked = np.where(np.isnan(ndvi_1), np.nan, ndvi_2)  # apply novalue mask of 1st image
+    # intermediate data
+    predicted_image = None
+    residual_image = None
+    morph_mask = None
 
-    # flattened arrays independent and dependent variables for regression
-    ndvi_1_flat = ndvi_1_masked[np.isnan(ndvi_1_masked)==False]
-    ndvi_2_flat = ndvi_2_masked[np.isnan(ndvi_2_masked)==False]
+    for it in range(iter):
+        print '\niteration %d' % (it + 1)
+        print '-----------'
+        # the number of numerical elements for regression must be
+        # the same for both image arrays hence novalue
+        # masks of each image must be applied to other
+        # the resulting arrays will have the same shape
+        ndvi_1_masked = np.where(np.isnan(ndvi_2), np.nan, ndvi_1)  # apply novalue mask of 2nd image
+        ndvi_2_masked = np.where(np.isnan(ndvi_1), np.nan, ndvi_2)  # apply novalue mask of 1st image
 
-    # random sample of pixels
-    sample_pixels = random.sample(zip(ndvi_1_flat, ndvi_2_flat), 3000)  # the sample size suggested by article
+        # flattened arrays independent and dependent variables for regression
+        ndvi_1_flat = ndvi_1_masked[np.isnan(ndvi_1_masked)==False]
+        ndvi_2_flat = ndvi_2_masked[np.isnan(ndvi_2_masked)==False]
 
-    training_list_x = []
-    training_list_y = []
+        # random sample of pixels
+        sample_pixels = random.sample(zip(ndvi_1_flat, ndvi_2_flat), 3000)  # the sample size suggested by article
 
-    for i in range(len(sample_pixels)):
-        training_list_x.append(sample_pixels[i][0])
-        training_list_y.append(sample_pixels[i][1])
+        training_list_x = []
+        training_list_y = []
 
-    training_sample_x = np.array(training_list_x)
-    training_sample_y = np.array(training_list_y)
+        for i in range(len(sample_pixels)):
+            training_list_x.append(sample_pixels[i][0])
+            training_list_y.append(sample_pixels[i][1])
 
-    # train linear regression model using samples
-    slope, intercept, r_value, p_value, std_err = scipy.stats.linregress(training_sample_x, training_sample_y)
-    print '\nslope: %f' % slope
-    print 'intercept: %f' % intercept
-    print 'R value: %f' % r_value
-    print 'p value: %f' % p_value
-    print 'error: %f' % std_err
+        training_sample_x = np.array(training_list_x)
+        training_sample_y = np.array(training_list_y)
 
-    model = slope * training_sample_x + intercept
+        # train linear regression model using samples
+        slope, intercept, r_value, p_value, std_err = scipy.stats.linregress(training_sample_x, training_sample_y)
+        print 'slope: %f' % slope
+        print 'intercept: %f' % intercept
+        print 'R value: %f' % r_value
+        print 'p value: %f' % p_value
+        print 'error: %f' % std_err
 
-    # plot samples and regression line
-    fig, ax = plt.subplots()
-    plt.title('NDVI Values of Worldview 2 and Landsat 8')
-    ax.scatter(training_sample_x, training_sample_y, c='g' , marker='.', alpha=.4)
-    plt.plot(training_sample_x, model, 'k-', lw=2)
-    ax.set_ylabel('NDVI Landsat8')
-    ax.set_xlabel('Average NDVI Worldview2')
-    ax.text(0.0, 0.6, "${:.6f}$".format(slope)+'$x$' + ' $+$ ' + "${:.6f}$".format(intercept))
-    ax.text(0.0, 0.55,"$r^2$" + " = " + "${:.6f}$".format(r_value))
-    plt.savefig('plot.png')
+        model = slope * training_sample_x + intercept
 
-    # predict landsat image from regression model
-    predicted_image = slope * ndvi_1_masked + intercept
+        # plot samples and regression line
+        fig, ax = plt.subplots()
+        plt.title('NDVI Values of Worldview 2 and Landsat 8')
+        ax.scatter(training_sample_x, training_sample_y, c='g' , marker='.', alpha=.4)
+        plt.plot(training_sample_x, model, 'k-', lw=2)
+        ax.set_ylabel('NDVI Landsat8')
+        ax.set_ylim([-0.1,0.7])
+        ax.set_xlim([-0.1, 0.9])
+        ax.set_xlabel('Average NDVI Worldview2')
+        ax.text(0.0, 0.6, "${:.6f}$".format(slope)+'$x$' + ' $+$ ' + "${:.6f}$".format(intercept))
+        ax.text(0.0, 0.55,"$r^2$" + " = " + "${:.6f}$".format(r_value))
+
+        plot_title = 'plot' + str(it + 1) + '.png'
+        plt.savefig(plot_title)
+
+        # predict landsat image from regression model
+        predicted_image = slope * ndvi_1_masked + intercept
+
+        # generate residual image
+        residual_image = ndvi_2_masked - predicted_image
+
+        # compute standard deviation of residual image, ignoring nan values
+        std_residual = np.nanstd(residual_image)
+
+        print '\nstandard deviation of residual landsat image is: %f' % std_residual
+
+        # generate mask by threshold
+        # set nodata value to 0 in the residual image so that
+        # it does not interfere in the following step
+        residual_image[np.isnan(residual_image)] = 0.
+
+        mask = np.where((residual_image > -std_residual*std_mult) & (residual_image < std_residual*std_mult),
+                        np.array(1), np.array(0)).astype(bool)
+
+        # apply a morphological filter to the mask to remove salt and pepper effect
+        morph_mask = morph.binary_closing(mask)
+
+        print 'thresholding landsat ndvi image with %fx the standard deviation of residual image: %f' % \
+              (std_mult, float(std_mult*std_residual))
+
+        # apply the temporal mask to dependent variable pixel array
+        # prior to masking since the no value masks
+        # were only needed for regression
+        ndvi_2 = np.where(morph_mask== 1, ndvi_2, np.nan)
+        # output_ds(ndvi_2, Y_img_param, GDT_Float32, 'landsat_ndvi_masked' + str(it+1) + '.tif')
+
+    # save intermediate data if True:
     if data_to_disk:
         output_ds(predicted_image, Y_img_param, GDT_Float32, 'predicted_ndvi.tif')
-
-    # generate residual image
-    residual_image = ndvi_2_masked - predicted_image
-    if data_to_disk:
         output_ds(residual_image, Y_img_param, GDT_Float32, 'residual_image.tif')
-
-    # plot histogram of residual image
-    # r = residual_image[np.isnan(residual_image)==False]
-    # n, bins, patches = plt.hist(r, bins=1000)
-    # plt.show()
-
-    # compute standard deviation of residual image, ignoring nan values
-    std_residual = np.nanstd(residual_image)
-
-    print '\nstandard deviation of residual landsat image is: %f' % std_residual
-
-    # generate mask by threshold
-    # set nodata value to 0 in the residual image so that
-    # it does not interfere in the following step
-    residual_image[np.isnan(residual_image)] = 0.
-
-    mask = np.where((residual_image > -std_residual*1.5) & (residual_image < std_residual*1.5),
-                    np.array(1), np.array(0)).astype(bool)
-
-    # apply a morphological filter to the mask to remove salt and pepper effect
-    morph_mask = morph.binary_closing(mask)
-    if data_to_disk:
         output_ds(morph_mask, Y_img_param, GDT_Byte, 'mask.tif')
 
-    print 'thresholding landsat ndvi image with 1.25x the standard deviation of residual image: %f' % (std_residual*2)
-
-    # apply the temporal mask to dependent variable pixel array
-    # prior to masking since the no value masks
-    # were only needed for regression
-    ndvi_2 = np.where(morph_mask== 1, ndvi_2, np.nan)
     output_ds(ndvi_2, Y_img_param, GDT_Float32, 'landsat_ndvi_masked.tif')
 
     # close image array datasets
@@ -323,8 +339,8 @@ def main():
     # print '\nWorldview2 image has: \n%d columns\n%d rows' % (wv2_param[0], wv2_param[1])
 
     # downscale wv2 image
-    print '\nDownscaling...'
-    downscale_image(wv2_dir, landsat_param)
+    # print '\nDownscaling...'
+    # downscale_image(wv2_dir, landsat_param)
 
     # collect ndvi images
 
@@ -335,7 +351,7 @@ def main():
 
     # Worldview2 pixels are the independent variables
     # Landsat pixels are the dependent variables
-    temporal_mask(wv2_resampled, landsat_img, landsat_param, False)
+    temporal_mask(wv2_resampled, landsat_img, landsat_param, False, iter=3, std_mult=1.5)
 
 
 if __name__ == "__main__":
