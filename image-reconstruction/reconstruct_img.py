@@ -3,7 +3,6 @@
 # Regression Trees and Histogram Matching
 
 import gdal
-import arcpy
 import sys
 import time as tm
 import numpy as np

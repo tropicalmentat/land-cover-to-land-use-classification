@@ -12,11 +12,13 @@ import scipy
 import scipy.ndimage
 import scipy.stats
 import random
-import matplotlib.mlab as mlab
+import warnings
 from gdalconst import *
 from matplotlib import pyplot as plt
 from subprocess import call
 from skimage import morphology as morph
+
+warnings.filterwarnings("ignore",category =RuntimeWarning)
 
 def open_image(directory):
     """
@@ -57,35 +59,6 @@ def output_ds(out_array, img_params, d_type=GDT_Unknown, fn='result.tif'):
     Writes new data-set into disk
     and saves output arrays in the data-set.
     """
-    gdal_data_types = [
-                GDT_Byte,
-                GDT_CFloat32,
-                GDT_CFloat64,
-                GDT_CInt16,
-                GDT_CInt32,
-                GDT_Float32,
-                GDT_Float64,
-                GDT_Int16,
-                GDT_Int32,
-                GDT_UInt16,
-                GDT_UInt32,
-                GDT_Unknown,
-                ]
-
-    numpy_data_types = [
-                        'bool',
-                        'int8',
-                        'int16',
-                        'int32',
-                        'int64',
-                        'uint8',
-                        'uint16',
-                        'uint32',
-                        'uint64',
-                        'float16',
-                        'float32',
-                        'float64'
-                        ]
 
     # create output raster data-set
     cols = img_params[0]
@@ -104,7 +77,7 @@ def output_ds(out_array, img_params, d_type=GDT_Unknown, fn='result.tif'):
 
     out_band.WriteArray(out_array)
 
-    out_band.SetNoDataValue(-99.)
+    out_band.SetNoDataValue(-99)
     out_band.FlushCache()
     out_band.GetStatistics(0, 1)
 
@@ -154,7 +127,7 @@ def downscale_image(hires_img, lores_param):
     return
 
 
-def temporal_mask(X, Y, Y_img_param, data_to_disk=True, iter=1, std_mult=2.0):  # TODO function does too many things, refactor it
+def temporal_mask(X, Y, Y_img_param, data_to_disk=True, num_iter=1, std_mult=2.0):  # TODO function does too many things, refactor it
     """
     Masks out Normalized Vegetation Difference Index (NDVI)
     pixels that underwent change between the capture dates
@@ -194,7 +167,7 @@ def temporal_mask(X, Y, Y_img_param, data_to_disk=True, iter=1, std_mult=2.0):  
     data_to_disk - bool, optional parameter for saving
     intermediate data to disk
 
-    iter - integer, optional number of regression iterations
+    num_iter - integer, optional number of regression iterations
     to be performed
 
     std_mult - float, standard deviation multiplier for
@@ -211,12 +184,7 @@ def temporal_mask(X, Y, Y_img_param, data_to_disk=True, iter=1, std_mult=2.0):  
     ndvi_1[ndvi_1 == -99.] = np.nan
     ndvi_2[ndvi_2 == -99.] = np.nan
 
-    # intermediate data
-    predicted_image = None
-    residual_image = None
-    morph_mask = None
-
-    for it in range(iter):
+    for it in range(num_iter):
         print '\niteration %d' % (it + 1)
         print '-----------'
         # the number of numerical elements for regression must be
@@ -255,7 +223,7 @@ def temporal_mask(X, Y, Y_img_param, data_to_disk=True, iter=1, std_mult=2.0):  
 
         # plot samples and regression line
         fig, ax = plt.subplots()
-        plt.title('NDVI Values of Worldview 2 and Landsat 8')
+        plt.title('Iteration ' + str(it+1))
         ax.scatter(training_sample_x, training_sample_y, c='g' , marker='.', alpha=.4)
         plt.plot(training_sample_x, model, 'k-', lw=2)
         ax.set_ylabel('NDVI Landsat8')
@@ -278,48 +246,43 @@ def temporal_mask(X, Y, Y_img_param, data_to_disk=True, iter=1, std_mult=2.0):  
         std_residual = np.nanstd(residual_image)
 
         print '\nstandard deviation of residual landsat image is: %f' % std_residual
-
-        # generate mask by threshold
-        # set nodata value to 0 in the residual image so that
-        # it does not interfere in the following step
-        residual_image[np.isnan(residual_image)] = 0.
+        print 'thresholding landsat ndvi image with %fx the standard deviation of residual image: %f' % \
+              (std_mult, float(std_mult*std_residual))
 
         mask = np.where((residual_image > -std_residual*std_mult) & (residual_image < std_residual*std_mult),
                         np.array(1), np.array(0)).astype(bool)
-
         # apply a morphological filter to the mask to remove salt and pepper effect
         morph_mask = morph.binary_closing(mask)
-
-        print 'thresholding landsat ndvi image with %fx the standard deviation of residual image: %f' % \
-              (std_mult, float(std_mult*std_residual))
 
         # apply the temporal mask to dependent variable pixel array
         # prior to masking since the no value masks
         # were only needed for regression
-        ndvi_2 = np.where(morph_mask== 1, ndvi_2, np.nan)
-        # output_ds(ndvi_2, Y_img_param, GDT_Float32, 'landsat_ndvi_masked' + str(it+1) + '.tif')
+        ndvi_2 = np.where(morph_mask==1, ndvi_2, np.nan).astype(float)
 
-    # save intermediate data if True:
-    if data_to_disk:
-        output_ds(predicted_image, Y_img_param, GDT_Float32, 'predicted_ndvi.tif')
-        output_ds(residual_image, Y_img_param, GDT_Float32, 'residual_image.tif')
-        output_ds(morph_mask, Y_img_param, GDT_Byte, 'mask.tif')
+        # save intermediate data if option is True
+        # save data only at the final iteration
+        if it == (num_iter - 1) and data_to_disk:
+            print '\nsaving predicted image...'
+            output_ds(predicted_image, Y_img_param, GDT_Float32, 'predicted_ndvi.tif')
+            print 'saving residual image...'
+            output_ds(residual_image, Y_img_param, GDT_Float32, 'residual_image.tif')
+            print 'saving mask...'
+            output_ds(morph_mask, Y_img_param, GDT_Byte, 'mask.tif')
+
+        # close image array datasets
+        ndvi_1_flat = None
+        ndvi_2_flat = None
+        ndvi_1_masked = None
+        ndvi_2_masked = None
+        sample_pixels = None
+        training_sample_x = None
+        training_sample_y = None
+        predicted_image = None
+        residual_image = None
+        mask = None
+        morph_mask = None
 
     output_ds(ndvi_2, Y_img_param, GDT_Float32, 'landsat_ndvi_masked.tif')
-
-    # close image array datasets
-    # ndvi_1 = None
-    # ndvi_2 = None
-    # ndvi_1_flat = None
-    # ndvi_2_flat = None
-    # ndvi_1_masked = None
-    # ndvi_2_masked = None
-    # sample_pixels = None
-    # training_sample_x = None
-    # training_sample_y = None
-    # predicted_image = None
-    # residual_image = None
-    # mask = None
 
     return
 
@@ -351,7 +314,7 @@ def main():
 
     # Worldview2 pixels are the independent variables
     # Landsat pixels are the dependent variables
-    temporal_mask(wv2_resampled, landsat_img, landsat_param, False, iter=3, std_mult=1.5)
+    temporal_mask(wv2_resampled, landsat_img, landsat_param, num_iter=3, std_mult=1.5)
 
 
 if __name__ == "__main__":
