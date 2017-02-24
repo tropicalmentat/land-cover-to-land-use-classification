@@ -76,7 +76,13 @@ def display_image(img_array):
 
 def mask_dataset(img_ds, mask_ds, b_count):
     """
-    Masks the subject image-array
+    Mask an image-array.
+    --------------------
+    img_ds - gdal image data-set that will be masked
+
+    mask_ds - gdal image data-set of mask
+
+    b_count - integer, the number of bands
     """
 
     mask = mask_ds.GetRasterBand(1).ReadAsArray(0, 0)
@@ -87,7 +93,7 @@ def mask_dataset(img_ds, mask_ds, b_count):
     for band in range(b_count):
         b = img_ds.GetRasterBand(band+1)
         b_array = b.ReadAsArray(0, 0)
-        masked_array = b_array * mask
+        masked_array = np.where(mask == 0, np.array(0), b_array)
         masked_bands.append(masked_array)
 
     masked_array = np.dstack(masked_bands)
@@ -228,14 +234,12 @@ def main():
     # image parameters for output data-set
     img_params = get_img_param(sub_img)
 
-    sub_nbands = sub_img.RasterCount
-
     # mask subject scene
-    subject_union = mask_dataset(sub_img, unionmask_img, sub_nbands)
+    subject_union = mask_dataset(sub_img, unionmask_img, img_params[2])
     #display_image(subject_union)
 
     # mask reference scene with inverse of subject scene mask
-    reference_union = mask_dataset(ref_img, unionmask_img, sub_nbands)
+    reference_union = mask_dataset(ref_img, unionmask_img, img_params[2])
 
     # TODO: Implement overall error computation for each scene that underwent cloud removal
 
@@ -243,11 +247,11 @@ def main():
     model = build_regression(subject_union, reference_union)
 
     # prepare independent pixel values from subject scene
-    mask_subject = pixels_to_predict(sub_img, submask_img, refmask_img, sub_nbands)
+    mask_subject = pixels_to_predict(sub_img, submask_img, refmask_img, img_params[2])
     #display_image(mask_subject)
 
     # mask reference scene to prepare for mosaic
-    mask_ref = mask_dataset(ref_img, refmask_img, sub_nbands)
+    mask_ref = mask_dataset(ref_img, refmask_img, img_params[2])
     output_ds(mask_ref, img_params, 'masked_ref.tif')
 
     # predict pixel values of reference scene
