@@ -18,8 +18,6 @@ from matplotlib import pyplot as plt
 from subprocess import call
 from skimage import morphology as morph
 
-# to filter out runtimewarning when
-# computing statistics with nan values
 warnings.filterwarnings("ignore",category =RuntimeWarning)
 
 def open_image(directory):
@@ -316,7 +314,7 @@ def main():
 
     # Worldview2 pixels are the independent variables
     # Landsat pixels are the dependent variables
-    temporal_mask(wv2_resampled, landsat_img, landsat_param, False, num_iter=3, std_mult=1.5)
+    temporal_mask(wv2_resampled, landsat_img, landsat_param, num_iter=3, std_mult=1.5)
 
 
 if __name__ == "__main__":
