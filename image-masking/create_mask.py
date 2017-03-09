@@ -73,7 +73,7 @@ def mask_image(band_list, mask_band, img_params, out_fn='result.tif'):
     proj = img_params[4]
     driver = img_params[5]
 
-    out_ras = driver.Create(out_fn, cols, rows, bands, GDT_UInt16, options=[])
+    out_ras = driver.Create(out_fn, cols, rows, bands, GDT_UInt32, options=[])
     out_ras.SetGeoTransform(gt)
     out_ras.SetProjection(proj)
 
@@ -104,12 +104,12 @@ def mask_image(band_list, mask_band, img_params, out_fn='result.tif'):
                 # print band_ds
 
                 # mask the data-set
-                band_ds[band_ds == no_value] = 0  # set the no-value pixels to 0
+                # band_ds[band_ds == no_value] = 15  # set the no-value pixels to 0
 
                 mask_array = mask_band.ReadAsArray(j, i, num_cols, num_rows).\
                     astype(np.uint16)
 
-                clear_pixels = np.where(mask_array == 0, np.array(0), band_ds)
+                clear_pixels = np.where(mask_array == 0, np.array(no_value), band_ds)
 
                 out_band.WriteArray(clear_pixels, j, i)
 
@@ -118,7 +118,7 @@ def mask_image(band_list, mask_band, img_params, out_fn='result.tif'):
                 clear_pixels = None
 
 
-        out_band.SetNoDataValue(0)
+        out_band.SetNoDataValue(no_value)
         out_band.FlushCache()
         out_band.GetStatistics(0, 1)
 
@@ -135,7 +135,6 @@ def compress_image(fn, out_fn='compressed.tif'):
     """
     compress_cmd = ['gdal_translate',
                      '-of', 'GTiff',
-                     '-te',  # specify extent
                      '-co', 'COMPRESS=LZW',  # use LZW compression algorithm
                      '-co', 'PREDICTOR=2',
                      '-co', 'TILED=YES',
@@ -148,8 +147,8 @@ def main():
     start = tm.time()
 
     # Worldview2
-    img_fn = "G:\LUIGI\ICLEI\IMAGE PROCESSING\\1a. IMAGE PREPROCESSING\WORKING FILES\\study_area.tif"
-    poly_fn = "G:\LUIGI\ICLEI\IMAGE PROCESSING\\1a. IMAGE PREPROCESSING\WORKING FILES\digitized image features\\wv2_mask.shp"
+    img_fn = "vegetation-impervious_clip.tif"
+    poly_fn = "urban_mask.shp"
 
     # Landsat
     #img_fn = "G:\LUIGI\ICLEI\IMAGE PROCESSING\IMAGES\LC81140512014344LGN00\CLIP\LC81140512014344LGN00_BANDSTACK"
@@ -178,10 +177,10 @@ def main():
     for f in glob.glob(cwd + '\*_mask.tif'):  # search for the .tif file of the mask
         mask_img = gdal.Open(f, GA_ReadOnly)
         band_mask = mask_img.GetRasterBand(1)
-        mask_image(b_list, band_mask, wv2_param, 'study_area_masked.tif')
+        mask_image(b_list, band_mask, wv2_param, 'pervious-impervious_masked.tif')
 
     # compress image
-    for f in glob.glob(cwd + '\*area_masked.tif'):
+    for f in glob.glob(cwd + '\*_masked.tif'):
         compress_image(f)
 
     print 'Processing time: %f' % (tm.time() - start)
