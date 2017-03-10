@@ -1,11 +1,17 @@
+# references
+# http://chris35wills.github.io/courses/pydata_stack/
+
 from subprocess import call
 import sys
 import gdal
 from gdalconst import *
-from skimage.transform import downscale_local_mean
-from scipy.ndimage import median_filter
+# from skimage.transform import downscale_local_mean
+# from scipy.ndimage import median_filter
 import pandas as pd
 import numpy as np
+# import xarray as xr
+import time as tm
+# from skimage.measure import block_reduce
 
 
 def open_image(directory):
@@ -39,6 +45,37 @@ def get_img_param(image_dataset):
     img_params = [cols, rows, num_bands, img_gt, img_proj, img_driver]
 
     return img_params
+
+
+def output_ds(out_array, img_params, d_type=GDT_Unknown, fn='result.tif'):
+    """
+    Helper function.
+    Writes new data-set into disk
+    and saves output arrays in the data-set.
+    """
+
+    # create output raster data-set
+    cols = img_params[0]
+    rows = img_params[1]
+    bands = 1  # ndvi image needs only one band
+    gt = img_params[3]
+    proj = img_params[4]
+    driver = gdal.GetDriverByName('GTiff')
+    driver.Register()
+
+    out_ras = driver.Create(fn, cols, rows, bands, d_type)
+    out_ras.SetGeoTransform(gt)
+    out_ras.SetProjection(proj)
+
+    out_band = out_ras.GetRasterBand(1)
+
+    out_band.WriteArray(out_array)
+
+    out_band.SetNoDataValue(-99)
+    out_band.FlushCache()
+    out_band.GetStatistics(0, 1)
+
+    return
 
 
 def downscale_image(hires_img, lores_param, fn='resampled.tif'):
@@ -84,21 +121,40 @@ def downscale_image(hires_img, lores_param, fn='resampled.tif'):
     return
 
 
-def map_impervious(ref_img, ndvi, fn='impervious_surfaces.tif'):
+def map_impervious(ref_img, ndvi, img1_param, img2_param, fn='impervious_surfaces.tif'):
+
+    col_ds_factor = img1_param[0]/float(img2_param[0])
+    print int(col_ds_factor)
+    row_ds_factor = img1_param[1]/float(img2_param[1])
+    print int(row_ds_factor)
 
     ref_var = ref_img.GetRasterBand(1)
-    no_value = ref_var.GetNoDataValue()
-    ref_arr = ref_var.ReadAsArray(0, 0)
-    # a = ref_arr[ref_arr==no_value] = 0
+    ref_var_no_value = ref_var.GetNoDataValue()
+    ref_arr = ref_var.ReadAsArray(0, 0).astype(np.float16)
+    ref_arr[ref_arr==ref_var_no_value] = np.nan
 
-    # print ref_var
+    # br = block_reduce(ref_arr, (55, 55), func=np.sum)
 
-    # downscaled = downscale_local_mean(ref_var, (290, 197))
-    # print downscaled
-    # median = median_filter(ref_var, (55,55))
-    # print median[median!=15]
+    # a solution for downscaling the worldview2 image can be found here
+    # http://stackoverflow.com/questions/890128/why-are-python-lambdas-useful
     df = pd.DataFrame(ref_arr)
-    print df
+    downscaled = df.groupby(lambda x: int(x/col_ds_factor)).mean().\
+        groupby(lambda y: int(y/row_ds_factor), axis=1).mean()
+    downscaled1 = downscaled.drop(197, 0)
+    print downscaled1
+    ods = np.array(downscaled1)
+    print ods[~np.isnan(ods)]
+    output_ds(ods, img2_param, GDT_Float32)
+
+
+    # ndvi_ds = ndvi.GetRasterBand(1)
+    # ndvi_ds_no_value = ndvi_ds.GetNoDataValue()
+    # ndvi_arr = ndvi_ds.ReadAsArray(0, 0).astype(np.float16)
+    # ndvi_arr[ndvi_arr==ndvi_ds_no_value] = np.nan
+
+    # ndvi_df = pd.DataFrame(ndvi_arr)
+    # test_downscale = ndvi_df.groupby(lambda x: x/10).mean()
+    # print test_downscale
 
     return
 
@@ -109,23 +165,25 @@ def main():
 
     ndvi_img = open_image(landsat_dir)
     ndvi_param = get_img_param(ndvi_img)
-    print ndvi_param[0], ndvi_param[1]
+    print 'The landsat NDVI image has \n{} columns \n{} rows'\
+        .format(ndvi_param[0], ndvi_param[1])
 
     img = open_image(img_dir)
     img_param = get_img_param(img)
-    print img_param[0], img_param[1]
+    print '\nThe worldview2 image has \n{} columns\n{} rows'\
+        .format(img_param[0], img_param[1])
 
-    print img_param[0]/ndvi_param[0],img_param[1]/ndvi_param[1]
+    print '\n{} {}'.\
+        format(img_param[0]/float(ndvi_param[0]),img_param[1]/float(ndvi_param[1]))
 
-    map_impervious(img, ndvi_img)
+    map_impervious(img, ndvi_img, img_param, ndvi_param)
 
     # downscale_image(img_dir, ndvi_param)
 
     # resampled_ = open_image('resampled.tif')
     # resampled_param = get_img_param(resampled_)
 
-
-    # map_impervious(resa)
-
 if __name__=="__main__":
+    start = tm.time()
     main()
+    print '\nProcessing time: %f seconds' % (tm.time() - start)
