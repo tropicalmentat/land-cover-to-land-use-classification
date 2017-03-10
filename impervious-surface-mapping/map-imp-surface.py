@@ -106,6 +106,7 @@ def downscale_image(hires_img, lores_param, fn='resampled.tif'):
 
     downsample_cmd = [
                       'gdalwarp',
+                      '-ot', 'Float32',
                       '-r', 'average',  # use average as sampling algorithm
                       '-te',  # specify extent
                       str(x_min), str(y_min),
@@ -147,14 +148,7 @@ def map_impervious(ref_img, ndvi, img1_param, img2_param, fn='impervious_surface
     output_ds(ods, img2_param, GDT_Float32)
 
 
-    # ndvi_ds = ndvi.GetRasterBand(1)
-    # ndvi_ds_no_value = ndvi_ds.GetNoDataValue()
-    # ndvi_arr = ndvi_ds.ReadAsArray(0, 0).astype(np.float16)
-    # ndvi_arr[ndvi_arr==ndvi_ds_no_value] = np.nan
 
-    # ndvi_df = pd.DataFrame(ndvi_arr)
-    # test_downscale = ndvi_df.groupby(lambda x: x/10).mean()
-    # print test_downscale
 
     return
 
@@ -176,9 +170,9 @@ def main():
     print '\n{} {}'.\
         format(img_param[0]/float(ndvi_param[0]),img_param[1]/float(ndvi_param[1]))
 
-    map_impervious(img, ndvi_img, img_param, ndvi_param)
+    # map_impervious(img, ndvi_img, img_param, ndvi_param)
 
-    # downscale_image(img_dir, ndvi_param)
+    downscale_image(img_dir, ndvi_param)
 
     # resampled_ = open_image('resampled.tif')
     # resampled_param = get_img_param(resampled_)
