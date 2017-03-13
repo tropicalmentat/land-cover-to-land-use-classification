@@ -5,13 +5,15 @@ from subprocess import call
 import sys
 import gdal
 from gdalconst import *
-# from skimage.transform import downscale_local_mean
-# from scipy.ndimage import median_filter
-import pandas as pd
 import numpy as np
-# import xarray as xr
 import time as tm
-# from skimage.measure import block_reduce
+import scipy
+import scipy.ndimage
+import scipy.stats
+import random
+from matplotlib import pyplot as plt
+from sklearn.linear_model import LinearRegression
+from sklearn.feature_selection import f_regression
 
 
 def open_image(directory):
@@ -122,45 +124,104 @@ def downscale_image(hires_img, lores_param, fn='resampled.tif'):
     return
 
 
-def map_impervious(ref_img, ndvi, img1_param, img2_param, fn='impervious_surfaces.tif'):
+def map_impervious(ind_var_img, dep_var_img, ind_var_param, dep_var_param, fn='impervious_surfaces.tif'):
+    """
+    Performs sub-pixel mixture analysis of landsat for impervious surfaces.
+    Uses a resampled (using the average algorithm in gdalwarp) worldview2
+    classified land-cover image.
+    -----------------------------------------------------------------------
+    ind_var_img : reference impervious surface image, downsampled from a
+    high-resolution land-cover image.
 
-    col_ds_factor = img1_param[0]/float(img2_param[0])
-    print int(col_ds_factor)
-    row_ds_factor = img1_param[1]/float(img2_param[1])
-    print int(row_ds_factor)
+    """
+    # col_ds_factor = ind_var_param[0]/float(dep_var_param[0])
+    # # print int(col_ds_factor)
+    # row_ds_factor = ind_var_param[1]/float(dep_var_param[1])
+    # # print int(row_ds_factor)
 
-    ref_var = ref_img.GetRasterBand(1)
-    ref_var_no_value = ref_var.GetNoDataValue()
-    ref_arr = ref_var.ReadAsArray(0, 0).astype(np.float16)
-    ref_arr[ref_arr==ref_var_no_value] = np.nan
+    iv = ind_var_img.GetRasterBand(1)
+    iv_novalue = iv.GetNoDataValue()
+    iv_array = iv.ReadAsArray(0, 0).astype(np.float32)
+    iv_array[iv_array == iv_novalue] = np.nan
 
-    # br = block_reduce(ref_arr, (55, 55), func=np.sum)
+    dv_bandlist = []
+    for band in range(dep_var_param[2]):
+        dv = dep_var_img.GetRasterBand(band + 1)
+        dv_novalue = dv.GetNoDataValue()
+        dv_array = dv.ReadAsArray(0, 0).astype(np.float32)
+        dv_array[dv_array == dv_novalue] = np.nan
+        dv_bandlist.append(dv_array)
 
-    # a solution for downscaling the worldview2 image can be found here
-    # http://stackoverflow.com/questions/890128/why-are-python-lambdas-useful
-    df = pd.DataFrame(ref_arr)
-    downscaled = df.groupby(lambda x: int(x/col_ds_factor)).mean().\
-        groupby(lambda y: int(y/row_ds_factor), axis=1).mean()
-    downscaled1 = downscaled.drop(197, 0)
-    print downscaled1
-    ods = np.array(downscaled1)
-    print ods[~np.isnan(ods)]
-    output_ds(ods, img2_param, GDT_Float32)
+    dv_bandstack = np.dstack(dv_bandlist)
+    # print dv_bandstack
 
+    # mask each array with no-value of the other
+    iv_masked = np.where(np.isnan(dv_bandstack[:, :, 0]), np.nan, iv_array)
 
+    dv_masked = None
+    for band in range(dv_bandstack.shape[2]):
+        dv_masked = np.where(np.isnan(iv_array), np.nan, dv_bandstack[:, :, band])
 
+    # flatten each array
+    iv_flat = iv_masked[~np.isnan(iv_masked)]
+    dv_flat = dv_bandstack[~np.isnan(dv_masked)]
+
+    # # random sample of pixels
+    # sample_pixels = random.sample(zip(iv_flat, dv_flat), 2500)  # the sample size suggested by article
+    #
+    # training_list_x = []
+    # training_list_y = []
+    #
+    # for i in range(len(sample_pixels)):
+    #     training_list_x.append(sample_pixels[i][0])
+    #     training_list_y.append(sample_pixels[i][1])
+    #
+    # training_sample_x = np.array(training_list_x)
+    # training_sample_y = np.array(training_list_y)
+    # print training_sample_x
+    # print training_sample_y
+    #
+    # # # train linear regression model using samples
+    # # slope, intercept, r_value, p_value, std_err = scipy.stats.linregress(training_sample_x, training_sample_y)
+    # # print 'slope: %f' % slope
+    # # print 'intercept: %f' % intercept
+    # # print 'R value: %f' % r_value
+    # # print 'p value: %f' % p_value
+    # # print 'error: %f' % std_err
+    # #
+    # # model = slope * training_sample_x + intercept
+    # #
+    # # # plot samples and regression line
+    # # fig, ax = plt.subplots()
+    # # plt.title('wv2 average imp. vs. landsat ndvi')
+    # # ax.scatter(training_sample_x, training_sample_y, c='g', marker='.', alpha=.4)
+    # # plt.plot(training_sample_x, model, 'k-', lw=2)
+    # # ax.set_ylabel('NDVI Landsat8')
+    # # ax.set_ylim([-0.1, 0.7])
+    # # ax.set_xlim([-0.1, 0.9])
+    # # ax.set_xlabel('Average Impervious Worldview2')
+    # # ax.text(0.0, 0.6, "${:.6f}$".format(slope) + '$x$' + ' $+$ ' + "${:.6f}$".format(intercept))
+    # # ax.text(0.0, 0.55, "$r^2$" + " = " + "${:.6f}$".format(r_value))
+    # #
+    # # plot_title = 'plot.png'
+    # # plt.savefig(plot_title)
+    #
+    # print len(training_sample_x)
+    # print len(training_sample_y)
+    clf = f_regression(dv_flat, iv_flat)
+    print clf
 
     return
 
 
 def main():
     img_dir = 'vegetation-impervious_postprocessed.tif'
-    landsat_dir = 'landsat_ndvi_masked.tif'
+    landsat_dir = 'landsat_urban_masked.tif'
 
-    ndvi_img = open_image(landsat_dir)
-    ndvi_param = get_img_param(ndvi_img)
+    landsat_img = open_image(landsat_dir)
+    landsat_param = get_img_param(landsat_img)
     print 'The landsat NDVI image has \n{} columns \n{} rows'\
-        .format(ndvi_param[0], ndvi_param[1])
+        .format(landsat_param[0], landsat_param[1])
 
     img = open_image(img_dir)
     img_param = get_img_param(img)
@@ -168,14 +229,14 @@ def main():
         .format(img_param[0], img_param[1])
 
     print '\n{} {}'.\
-        format(img_param[0]/float(ndvi_param[0]),img_param[1]/float(ndvi_param[1]))
+        format(img_param[0]/float(landsat_param[0]),img_param[1]/float(landsat_param[1]))
 
-    # map_impervious(img, ndvi_img, img_param, ndvi_param)
+    # downscale_image(img_dir, ndvi_param)
 
-    downscale_image(img_dir, ndvi_param)
-
-    # resampled_ = open_image('resampled.tif')
-    # resampled_param = get_img_param(resampled_)
+    resampled_ = open_image('resampled.tif')
+    resampled_param = get_img_param(resampled_)
+    map_impervious(resampled_, landsat_img, resampled_param, landsat_param)
+    # map_impervious(ndvi_img, resampled_, ndvi_param, resampled_param)
 
 if __name__=="__main__":
     start = tm.time()
