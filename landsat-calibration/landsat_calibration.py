@@ -3,15 +3,38 @@ from gdalconst import *
 import numpy as np
 import time as tm
 import sys
+import pandas as pd
+import math
 
 
-RADIO_RESCALE = {
+RADIO_RESCALE = pd.DataFrame({"RADMULT": [0.012586,
+                                         0.012888,
+                                         0.011877,
+                                         0.010015,
+                                        0.0061286,
+                                        0.0015241,
+                                       0.00051372,
+                                         0.011334,
+                                        0.0023952,],
 
-}
+                             "RADADD": [-62.93066,
+                                        -64.44177,
+                                        -59.38254,
+                                        -50.07470,
+                                        -30.64322,
+                                        -7.62069,
+                                        -2.56858,
+                                        -56.67078,
+                                        -11.97606,],
+                              },
+                             index=['1', '2', '3', '4', '5',
+                                    '6', '7', '8', '9'])
 
-REFLECT_RESCALE = {
+print RADIO_RESCALE, '\n'
 
-}
+REFLECT_RESCALE = {"REFMULT": 0.000020000, "REFADD": -0.100000}
+
+DOY = []
 
 
 def open_image(directory):
@@ -57,7 +80,7 @@ def output_ds(out_array, img_params, d_type=GDT_Unknown, fn='result.tif'):
     # create output raster data-set
     cols = img_params[0]
     rows = img_params[1]
-    bands = 1  # ndvi image needs only one band
+    bands = out_array.shape[2]
     gt = img_params[3]
     proj = img_params[4]
     driver = gdal.GetDriverByName('GTiff')
@@ -67,27 +90,79 @@ def output_ds(out_array, img_params, d_type=GDT_Unknown, fn='result.tif'):
     out_ras.SetGeoTransform(gt)
     out_ras.SetProjection(proj)
 
-    out_band = out_ras.GetRasterBand(1)
-
-    out_band.WriteArray(out_array)
-
-    out_band.SetNoDataValue(-99)
-    out_band.FlushCache()
-    out_band.GetStatistics(0, 1)
+    for b in range(bands):
+        if bands == 1:
+            out_band = out_ras.GetRasterBand(b + 1)
+            out_band.WriteArray(out_array)
+            out_band.SetNoDataValue(-99)
+            out_band.FlushCache()
+            out_band.GetStatistics(0, 1)
+        else:
+            out_band = out_ras.GetRasterBand(b+1)
+            out_band.WriteArray(out_array[:,:,b])
+            out_band.SetNoDataValue(-99)
+            out_band.FlushCache()
+            out_band.GetStatistics(0, 1)
 
     return
 
 
-def dn_to_radiance():
+def dn_to_radiance(img, img_param):
+
+    band_list = []
+    for b in range(img_param[2]):
+        band = img.GetRasterBand(b+1)
+        nodata = band.GetNoDataValue()
+        raw_dn = band.ReadAsArray(0, 0).astype(np.float32)
+        raw_dn[raw_dn==nodata] = np.nan
+        rad = RADIO_RESCALE['RADMULT'].loc[str(b+1)]*raw_dn + RADIO_RESCALE['RADADD'].loc[str(b+1)]
+        band_list.append(rad)
+        print rad[~np.isnan(rad)].max()
+        print rad[~np.isnan(rad)].min()
+
+    band_stack = np.dstack(band_list)
+    output_ds(band_stack, img_param, d_type=GDT_Float32, fn='radiance.tif')
+
+    return band_stack
+
+
+def reflectance(img, img_param, sun_elev):
+
+    ref_list = []
+    for b in range(img_param[2]):
+        band = img.GetRasterBand(b + 1)
+        nodata = band.GetNoDataValue()
+        raw_dn = band.ReadAsArray(0, 0).astype(np.float32)
+        raw_dn[raw_dn == nodata] = np.nan
+        ref = REFLECT_RESCALE['REFMULT'] * raw_dn + REFLECT_RESCALE['REFADD']
+        # print ref[~np.isnan(ref)].max()
+        ref_list.append(ref)
+        print ref[~np.isnan(ref)].max()
+        print ref[~np.isnan(ref)].min()
+
+    ref_stack = np.dstack(ref_list)
+    output_ds(ref_stack, img_param, GDT_Float32, fn='reflectance.tif')
+
     return
 
 
-def radiance_to_reflectance():
+def normalize():
     return
 
 
 def main():
-    return
+    img_dir = "landsat_urban_masked.tif"
+
+    img = open_image(img_dir)
+    img_param = get_img_param(img)
+
+    radiance = dn_to_radiance(img, img_param)
+
+    solar_el = 60.87663588
+
+    refl = reflectance(img, img_param, solar_el)
+
+
 
 
 if __name__=="__main__":
