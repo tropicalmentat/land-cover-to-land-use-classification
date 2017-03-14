@@ -59,7 +59,7 @@ def output_ds(out_array, img_params, d_type=GDT_Unknown, fn='result.tif'):
     # create output raster data-set
     cols = img_params[0]
     rows = img_params[1]
-    bands = 1  # ndvi image needs only one band
+    bands = out_array.shape[2]
     gt = img_params[3]
     proj = img_params[4]
     driver = gdal.GetDriverByName('GTiff')
@@ -69,13 +69,19 @@ def output_ds(out_array, img_params, d_type=GDT_Unknown, fn='result.tif'):
     out_ras.SetGeoTransform(gt)
     out_ras.SetProjection(proj)
 
-    out_band = out_ras.GetRasterBand(1)
-
-    out_band.WriteArray(out_array)
-
-    out_band.SetNoDataValue(-99)
-    out_band.FlushCache()
-    out_band.GetStatistics(0, 1)
+    for b in range(bands):
+        if bands == 1:
+            out_band = out_ras.GetRasterBand(b + 1)
+            out_band.WriteArray(out_array)
+            out_band.SetNoDataValue(-99)
+            out_band.FlushCache()
+            out_band.GetStatistics(0, 1)
+        else:
+            out_band = out_ras.GetRasterBand(b+1)
+            out_band.WriteArray(out_array[:,:,b])
+            out_band.SetNoDataValue(-99)
+            out_band.FlushCache()
+            out_band.GetStatistics(0, 1)
 
     return
 
@@ -124,7 +130,7 @@ def downscale_image(hires_img, lores_param, fn='resampled.tif'):
     return
 
 
-def map_impervious(ind_var_img, dep_var_img, ind_var_param, dep_var_param, fn='impervious_surfaces.tif'):
+def map_impervious(ind_var_img, dep_var_img, iv_param, dv_param, fn='impervious_surfaces.tif'):
     """
     Performs sub-pixel mixture analysis of landsat for impervious surfaces.
     Uses a resampled (using the average algorithm in gdalwarp) worldview2
@@ -134,9 +140,9 @@ def map_impervious(ind_var_img, dep_var_img, ind_var_param, dep_var_param, fn='i
     high-resolution land-cover image.
 
     """
-    # col_ds_factor = ind_var_param[0]/float(dep_var_param[0])
+    # col_ds_factor = iv_param[0]/float(dv_param[0])
     # # print int(col_ds_factor)
-    # row_ds_factor = ind_var_param[1]/float(dep_var_param[1])
+    # row_ds_factor = iv_param[1]/float(dv_param[1])
     # # print int(row_ds_factor)
 
     iv = ind_var_img.GetRasterBand(1)
@@ -144,79 +150,70 @@ def map_impervious(ind_var_img, dep_var_img, ind_var_param, dep_var_param, fn='i
     iv_array = iv.ReadAsArray(0, 0).astype(np.float32)
     iv_array[iv_array == iv_novalue] = np.nan
 
-    dv_bandlist = []
-    for band in range(dep_var_param[2]):
-        dv = dep_var_img.GetRasterBand(band + 1)
-        dv_novalue = dv.GetNoDataValue()
-        dv_array = dv.ReadAsArray(0, 0).astype(np.float32)
-        dv_array[dv_array == dv_novalue] = np.nan
-        dv_bandlist.append(dv_array)
-
-    dv_bandstack = np.dstack(dv_bandlist)
-    # print dv_bandstack
+    dv = dep_var_img.GetRasterBand(1)
+    dv_novalue = dv.GetNoDataValue()
+    dv_array = dv.ReadAsArray(0, 0).astype(np.float32)
+    dv_array[dv_array == dv_novalue] = np.nan
 
     # mask each array with no-value of the other
-    iv_masked = np.where(np.isnan(dv_bandstack[:, :, 0]), np.nan, iv_array)
+    iv_masked = np.where(np.isnan(dv_array), np.nan, iv_array)
 
-    dv_masked = None
-    for band in range(dv_bandstack.shape[2]):
-        dv_masked = np.where(np.isnan(iv_array), np.nan, dv_bandstack[:, :, band])
+    dv_masked = np.where(np.isnan(iv_array), np.nan, dv_array)
 
     # flatten each array
     iv_flat = iv_masked[~np.isnan(iv_masked)]
-    dv_flat = dv_bandstack[~np.isnan(dv_masked)]
+    dv_flat = dv_array[~np.isnan(dv_masked)]
 
-    # # random sample of pixels
-    # sample_pixels = random.sample(zip(iv_flat, dv_flat), 2500)  # the sample size suggested by article
-    #
-    # training_list_x = []
-    # training_list_y = []
-    #
-    # for i in range(len(sample_pixels)):
-    #     training_list_x.append(sample_pixels[i][0])
-    #     training_list_y.append(sample_pixels[i][1])
-    #
-    # training_sample_x = np.array(training_list_x)
-    # training_sample_y = np.array(training_list_y)
-    # print training_sample_x
-    # print training_sample_y
-    #
-    # # # train linear regression model using samples
-    # # slope, intercept, r_value, p_value, std_err = scipy.stats.linregress(training_sample_x, training_sample_y)
-    # # print 'slope: %f' % slope
-    # # print 'intercept: %f' % intercept
-    # # print 'R value: %f' % r_value
-    # # print 'p value: %f' % p_value
-    # # print 'error: %f' % std_err
-    # #
-    # # model = slope * training_sample_x + intercept
-    # #
-    # # # plot samples and regression line
-    # # fig, ax = plt.subplots()
-    # # plt.title('wv2 average imp. vs. landsat ndvi')
-    # # ax.scatter(training_sample_x, training_sample_y, c='g', marker='.', alpha=.4)
-    # # plt.plot(training_sample_x, model, 'k-', lw=2)
-    # # ax.set_ylabel('NDVI Landsat8')
-    # # ax.set_ylim([-0.1, 0.7])
-    # # ax.set_xlim([-0.1, 0.9])
-    # # ax.set_xlabel('Average Impervious Worldview2')
-    # # ax.text(0.0, 0.6, "${:.6f}$".format(slope) + '$x$' + ' $+$ ' + "${:.6f}$".format(intercept))
-    # # ax.text(0.0, 0.55, "$r^2$" + " = " + "${:.6f}$".format(r_value))
-    # #
-    # # plot_title = 'plot.png'
-    # # plt.savefig(plot_title)
-    #
-    # print len(training_sample_x)
-    # print len(training_sample_y)
-    clf = f_regression(dv_flat, iv_flat)
-    print clf
+    # random sample of pixels
+    sample_pixels = random.sample(zip(iv_flat, dv_flat), 2500)  # the sample size suggested by article
+
+    training_list_x = []
+    training_list_y = []
+
+    for i in range(len(sample_pixels)):
+        training_list_x.append(sample_pixels[i][0])
+        training_list_y.append(sample_pixels[i][1])
+
+    training_sample_x = np.array(training_list_x)
+    training_sample_y = np.array(training_list_y)
+
+    # train linear regression model using samples
+    slope, intercept, r_value, p_value, std_err = scipy.stats.linregress(training_sample_x, training_sample_y)
+    p = np.polyfit(training_sample_x, training_sample_y, 2)
+    print 'slope: %f' % slope
+    print 'intercept: %f' % intercept
+    print 'R value: %f' % r_value
+    print 'p value: %f' % p_value
+    print 'error: %f' % std_err
+
+    # create test samples
+
+    print p
+    linear_model = slope * training_sample_x + intercept
+    poly_model = p[0]*training_sample_x**2 + p[1]*training_sample_x + p[2]
+
+    # plot samples and regression line
+    fig, ax = plt.subplots()
+    plt.title('wv2 average imp. vs. landsat ndvi')
+    ax.scatter(training_sample_x, training_sample_y, c='g', marker='.', alpha=.4)
+    plt.plot(training_sample_x, linear_model, 'k-', lw=2)
+    plt.plot(training_sample_x, poly_model, 'k.', lw=1)
+    ax.set_ylabel('Reference IS %')
+    ax.set_ylim([-0.1, 1])
+    ax.set_xlim([-0.1, 1])
+    ax.set_xlabel('landsat8 NDVI')
+    ax.text(0.6, 0.6, "${:.6f}$".format(slope) + '$x$' + ' $+$ ' + "${:.6f}$".format(intercept))
+    ax.text(0.6, 0.55, "$r^2$" + " = " + "${:.6f}$".format(r_value))
+
+    plot_title = 'plot.png'
+    plt.savefig(plot_title)
 
     return
 
 
 def main():
-    img_dir = 'vegetation-impervious_postprocessed.tif'
-    landsat_dir = 'landsat_urban_masked.tif'
+    img_dir = 'impervious-vegetation_postprocessed.tif'
+    landsat_dir = 'landsat_ndvi_masked.tif'
 
     landsat_img = open_image(landsat_dir)
     landsat_param = get_img_param(landsat_img)
@@ -231,12 +228,12 @@ def main():
     print '\n{} {}'.\
         format(img_param[0]/float(landsat_param[0]),img_param[1]/float(landsat_param[1]))
 
-    # downscale_image(img_dir, ndvi_param)
+    # downscale_image(img_dir, landsat_param)
 
     resampled_ = open_image('resampled.tif')
     resampled_param = get_img_param(resampled_)
-    map_impervious(resampled_, landsat_img, resampled_param, landsat_param)
-    # map_impervious(ndvi_img, resampled_, ndvi_param, resampled_param)
+    # map_impervious(resampled_, landsat_img, resampled_param, landsat_param)
+    map_impervious(landsat_img, resampled_, landsat_param, resampled_param)
 
 if __name__=="__main__":
     start = tm.time()
