@@ -222,14 +222,16 @@ def temporal_mask(X, Y, Y_img_param, data_to_disk=True, num_iter=1, std_mult=2.0
         print 'error: %f' % std_err
 
         # create random test samples
+        test_sample_x = np.random.rand(training_sample_x.shape[0])
+        print test_sample_x
 
-        model = slope * training_sample_x + intercept
+        model = slope * test_sample_x + intercept
 
         # plot samples and regression line
         fig, ax = plt.subplots()
         plt.title('Iteration ' + str(it+1))
         ax.scatter(training_sample_x, training_sample_y, c='g' , marker='.', alpha=.4)
-        plt.plot(training_sample_x, model, 'k-', lw=2)
+        plt.plot(test_sample_x, model, 'k-', lw=2)
         ax.set_ylabel('NDVI Landsat8')
         ax.set_ylim([-0.1,0.7])
         ax.set_xlim([-0.1, 0.9])
@@ -318,7 +320,7 @@ def main():
 
     # Worldview2 pixels are the independent variables
     # Landsat pixels are the dependent variables
-    temporal_mask(wv2_resampled, landsat_img, landsat_param, data_to_disk=True, num_iter=3, std_mult=1.5)
+    temporal_mask(wv2_resampled, landsat_img, landsat_param, data_to_disk=True, num_iter=5, std_mult=1.5)
 
 
 if __name__ == "__main__":
