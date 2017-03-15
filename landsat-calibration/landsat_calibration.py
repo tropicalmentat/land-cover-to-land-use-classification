@@ -1,12 +1,14 @@
+# reference: https://landsat.usgs.gov/landsat-8-l8-data-users-handbook-section-5
+
 import gdal
 from gdalconst import *
 import numpy as np
 import time as tm
 import sys
 import pandas as pd
-import math
+from math import cos
 
-
+print '\nrescaling values for converting pixel DN to radiance: \n'
 RADIO_RESCALE = pd.DataFrame({"RADMULT": [0.012586,
                                          0.012888,
                                          0.011877,
@@ -117,8 +119,8 @@ def dn_to_radiance(img, img_param):
         raw_dn[raw_dn==nodata] = np.nan
         rad = RADIO_RESCALE['RADMULT'].loc[str(b+1)]*raw_dn + RADIO_RESCALE['RADADD'].loc[str(b+1)]
         band_list.append(rad)
-        print rad[~np.isnan(rad)].max()
-        print rad[~np.isnan(rad)].min()
+        # print rad[~np.isnan(rad)].max()
+        # print rad[~np.isnan(rad)].min()
 
     band_stack = np.dstack(band_list)
     output_ds(band_stack, img_param, d_type=GDT_Float32, fn='radiance.tif')
@@ -126,27 +128,45 @@ def dn_to_radiance(img, img_param):
     return band_stack
 
 
-def reflectance(img, img_param, sun_elev):
+def reflectance(img, img_param, sun_elev, norm=True):
 
     ref_list = []
+    toa_ref_list = []
     for b in range(img_param[2]):
         band = img.GetRasterBand(b + 1)
         nodata = band.GetNoDataValue()
         raw_dn = band.ReadAsArray(0, 0).astype(np.float32)
         raw_dn[raw_dn == nodata] = np.nan
         ref = REFLECT_RESCALE['REFMULT'] * raw_dn + REFLECT_RESCALE['REFADD']
-        # print ref[~np.isnan(ref)].max()
         ref_list.append(ref)
-        print ref[~np.isnan(ref)].max()
-        print ref[~np.isnan(ref)].min()
+        # print ref[~np.isnan(ref)].max()
+        toa_ref = ref/cos(sun_elev)
+        toa_ref_list.append(toa_ref)
+        # print toa_ref[~np.isnan(toa_ref)].max()
+        # print toa_ref[~np.isnan(toa_ref)].min()
 
     ref_stack = np.dstack(ref_list)
+    toa_ref_stack = np.dstack(toa_ref_list)
     output_ds(ref_stack, img_param, GDT_Float32, fn='reflectance.tif')
+    output_ds(toa_ref_stack, img_param, GDT_Float32, fn='toa_reflectance.tif')
+
+    if norm:
+        normalize(ref_stack, img_param)
 
     return
 
 
-def normalize():
+def normalize(ref_bands, img_param):
+    u = np.sum(ref_bands, 2)
+    norm_ref_list =[]
+    for b in range(ref_bands.shape[2]):
+        norm_ref = np.multiply(np.divide(ref_bands[:,:,b], u), np.array(100))
+        # print norm_ref
+        norm_ref_list.append(norm_ref)
+
+    norm_stack = np.dstack(norm_ref_list)
+    output_ds(norm_stack,img_param, d_type=GDT_Float32,
+              fn='normalized_reflectance.tif')
     return
 
 
@@ -161,8 +181,6 @@ def main():
     solar_el = 60.87663588
 
     refl = reflectance(img, img_param, solar_el)
-
-
 
 
 if __name__=="__main__":
