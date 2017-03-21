@@ -1,200 +1,152 @@
-import sys
 import gdal
-import os
 import sys
 import time as tm
+import pandas as pd
+import scipy.stats as st
 import numpy as np
-import scipy
-import scipy.stats
+import numpy.ma as ma
+import os
 from gdalconst import *
-from skimage import exposure
-from skimage import io
-from sklearn.ensemble import RandomForestClassifier
-from matplotlib import pyplot as plt
-from matplotlib import colors
 from subprocess import call
 
-io.use_plugin('matplotlib')
-# to get matplotlib display images the following was taken from
-# https://github.com/scikit-image/scikit-image/issues/599
+def open_image(directory):
+    """
+    Helper function.
+    Opens image and returns
+    gdal MajorObject
+    """
+    image_ds = gdal.Open(directory, GA_ReadOnly)
+
+    if image_ds is None:
+        print 'Could not open ' + directory
+        sys.exit(1)
+
+    return image_ds
 
 
-def rasterize_roi(src, geotrans, cols, rows):
+def get_img_param(image_dataset):
+    """
+    Helper function.
+    Collects image parameters
+    returns them as a list.
+    """
+    cols = image_dataset.RasterXSize
+    rows = image_dataset.RasterYSize
+    num_bands = image_dataset.RasterCount
+    img_gt = image_dataset.GetGeoTransform()
+    img_proj = image_dataset.GetProjection()
+    img_driver = image_dataset.GetDriver()
+
+    img_params = [cols, rows, num_bands, img_gt, img_proj, img_driver]
+
+    return img_params
+
+
+def rasterize(src, img_param, fn='result.tif'):
     """
     Converts a region of interest vector data-set in .SHP file to a raster geotiff.
     Computes the extents from the geotransform of the source image of the roi.
-    :param src: directory of source image
-    :param geotrans: source image geotransform
-    :param cols: source image number of columns
-    :param rows: source image number of rows
-    :return:
     """
+
     # collect extent, resolution and geotrans, and proj of img to be masked
-    topleft_x = geotrans[0]
-    topleft_y = geotrans[3]
-    x = geotrans[1]
-    y = geotrans[5]
+    topleft_x = img_param[3][0]
+    topleft_y = img_param[3][3]
+    x = img_param[3][1]
+    y = img_param[3][5]
 
     # compute extents
     x_min = topleft_x
-    y_min = topleft_y + y*rows
-    x_max = topleft_x + x*cols
+    y_min = topleft_y + y*img_param[1]
+    x_max = topleft_x + x*img_param[0]
     y_max = topleft_y
-
-    out_fn = os.path.splitext(os.path.basename(src))[0] + '.tif'
 
     # gdal command construction from variables
     rasterize_cmd = ['gdal_rasterize',
-                     '-a', 'class',
-                     '-a_nodata', '0',
+                     '-a','Id',
+                     # '-a_nodata', '0',
                      '-ot', 'UInt16',
                      '-te',  # specify extent
                      str(x_min), str(y_min),
                      str(x_max), str(y_max),
                      '-ts',  # specify the number of columns and rows
-                     str(cols), str(rows),
+                     str(img_param[0]), str(img_param[1]),
                      '-l', os.path.splitext(os.path.basename(src))[0],  # layer name
-                     src, out_fn]
+                     src, fn]
 
     call(rasterize_cmd)
 
     return
 
 
-def rasterize_ROI(data_path, geotrans, cols, rows, projection, dataset_format = 'MEM'):
-
-    ds = gdal.OpenEx(data_path, gdal.OF_VECTOR)
-
-    if ds is None:
-        print 'Could not open ' + data_path
-        sys.exit(1)
-
-    layer = ds.GetLayer(0)
-    driver = gdal.GetDriverByName(dataset_format)
-    target_ds = driver.Create()
-
-    return
-
-
-def segment_features(segment_pixels):
-    """For each band, compute: min, max, mean, variance, skewness, kurtosis"""
-    features = []
-
-    n_pixels, n_bands = segment_pixels.shape
-    #n_pixels = segment_pixels[0] * segment_pixels[1]
-    #n_bands = segment_pixels[2]
-
-    for b in range(n_bands):
-        stat = scipy.stats.describe(segment_pixels[:, b])
-        band_stats = list(stat.minmax) + list(stat)[2:]
-        if n_pixels == 1:
-            band_stats[3] = 0.0
-        features += band_stats
-
-    return features
-
-
-def create_objects(image, roi_image, image_parameters):
+def create_objects(image, grid):
     """
     http://ceholden.github.io/open-geo-tutorial/python/chapter_5_classification.html
     reference for pairing the training segment with the image pixels
 
     https://github.com/machinalis/satimg/blob/master/object_based_image_analysis.ipynb
     reference for creating objects
-    :param image:
-    :param roi_image:
-    :return:
+
+    The image array and grid array must have the same shape.
     """
 
-    band_stack = []
+    img = image.GetRasterBand(1)
+    img_novalue = img.GetNoDataValue()
+    img_arr = img.ReadAsArray(0, 0)
+    grid = grid.GetRasterBand(1)
+    grid_arr = grid.ReadAsArray(0, 0)
 
-    n_bands = image_parameters[2]
+    print 'image array has shape {}'.format(img_arr.shape)
+    print 'grid array has shape {}'.format(grid_arr.shape)
+    print 'image array nodata value: {}'.format(img_novalue)
+    # obj_id = pd.Series(np.unique(grid_arr))
+    # print img_arr[grid_arr==1851]
 
-    # loop through each band
+    img_arr[img_arr>1] = np.nan
+    # mask = img_arr > 1
+    # masked_arr = ma.array(img_arr, mask=mask)
+    # print masked_arr
+    cell_id = []
+    cell = []
 
-    for b in range(n_bands):
-        img_band = image.GetRasterBand(b+1)
-        band_stack.append(img_band.ReadAsArray())
+    # compute statistics for each object
+    for i in np.unique(grid_arr):
+        obj = img_arr[grid_arr==i]
+        # print st.describe(obj, nan_policy='omit')
+        no_nan = obj[~np.isnan(obj)]
+        if len(no_nan) >= 9:
+            result = st.describe(no_nan, nan_policy='omit')
+            cell_id.append(i)
+            stats = list(result.minmax) + list(result)[2:]
+            cell.append(stats)
 
-    array_stack = np.dstack(band_stack)
+    objects = pd.DataFrame(cell, index=cell_id,
+                           columns=['min', 'max', 'mean',
+                                    'variance', 'skewness',
+                                    'kurtosis'])
 
-    #print array_stack
-    #print img_array
-    #print band_stack
+    return objects
 
-    roi_band = roi_image.GetRasterBand(1)
-    roi_array = roi_band.ReadAsArray()
 
-    #print array_stack[roi_array>0]
-    # TODO: Create features
-    labels = np.unique(roi_array[roi_array > 0])
-    feature_id = np.unique(roi_array)
+def main():
+    img_dir = "resampled.tif"
+    training_dir = ""
+    poly_grid_dir = "landuse_grid100.shp"
+    grid_dir = "grid100.tif"
 
-    #plt.figure()
-    #io.imshow(roi_array, cmap=plt.cm.Spectral)
-    #io.show()
+    img = open_image(img_dir)
+    img_param = get_img_param(img)
 
-    # create_objects
-    objects = []
-    object_ids = []
+    lu_grid = open_image(grid_dir)
+    lu_grid_param = get_img_param(lu_grid)
 
-    for segment_label in labels:
-        segment_pixels = array_stack[roi_array==segment_label]
+    # rasterize(poly_grid_dir, img_param)
 
-        #print segment_label, ',', segment_pixels.shape
-        #print segment_pixels
+    obj = create_objects(img, lu_grid)
+    #
+    # tr_sites = open_image(training_dir)
 
-        segment_model = segment_features(segment_pixels)
-        # TODO: Fix this section. Individual segments need to have their own ids. Not class labels
-        # Read Training data-set definition in
-        # https://www.machinalis.com/blog/obia/
-        objects.append(segment_model)
-        object_ids.append(segment_label)
-        #print segment_model
-
-    print "Created %i objects" % len(objects)
-
-    return
 
 if __name__ == "__main__":
     start = tm.time()
-
-    img_dir = "G:\LUIGI\ICLEI\IMAGE PROCESSING\\1b. LAND COVER CLASSIFICATION\\test_clip.tif"
-    roi_dir = "G:\LUIGI\ICLEI\IMAGE PROCESSING\\1b. LAND COVER CLASSIFICATION\WORKING FILES\\training sites\\training_sites.shp"
-
-    # convert .shp file of training segments to .tif with parameters of image to be classified
-    img = gdal.Open(img_dir, GA_ReadOnly)
-
-    if img is None:
-        print 'Could not open ' + img_dir
-        sys.exit(1)
-
-    # collect image parameters
-    cols = img.RasterXSize
-    rows = img.RasterYSize
-    num_bands = img.RasterCount
-    img_gt = img.GetGeoTransform()
-    img_proj = img.GetProjection()
-    img_driver = img.GetDriver()
-
-    img_params = [cols, rows, num_bands, img_gt, img_proj, img_driver]
-
-    rasterize_roi(roi_dir, img_gt, cols, rows)
-
-    for root, dirs, files in os.walk(os.getcwd()):
-        if '1b.' in root:
-            pass
-        else:
-            for f in files:
-                if f == 'training_sites.tif':
-                    #print f
-                    roi = gdal.Open(f, GA_ReadOnly)
-                    if img is None:
-                        print 'Could not open ' + img_dir
-                        sys.exit(1)
-
-                    create_objects(img, roi, img_params)
-
-                # the roi image uses has the same parameters as the satellite image
-
-    print 'Processing time: %f' % (tm.time() - start)
+    main()
+    print '\nProcessing time: %f seconds' % (tm.time() - start)
