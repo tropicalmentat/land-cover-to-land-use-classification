@@ -157,10 +157,20 @@ def reflectance(img, img_param, sun_elev, norm=True):
 
 
 def normalize(ref_bands, img_param):
-    u = np.sum(ref_bands, 2)
+    """
+    This method of normalization was derived from
+    Wu (2004) in Normalized spectral mixture analysis
+    for monitoring urban composition using ETM+ imagery.
+    ref_bands: reflectance pixels array of n-dimensions
+    img_param: list of landsat image parameters
+    """
+
+    avg_ref = np.mean(ref_bands, 2, )
+    # print avg_ref[~np.isnan(avg_ref)]
     norm_ref_list =[]
-    for b in range(ref_bands.shape[2]):
-        norm_ref = np.multiply(np.divide(ref_bands[:,:,b], u), np.array(100))
+    for b in range(ref_bands.shape[2],5):
+        norm_ref = np.multiply(np.divide(ref_bands[:,:,b], avg_ref), 100)
+        # print norm_ref[~np.isnan(norm_ref)]
         # print norm_ref
         norm_ref_list.append(norm_ref)
 
