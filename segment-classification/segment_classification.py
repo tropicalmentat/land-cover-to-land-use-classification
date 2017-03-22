@@ -12,8 +12,9 @@ import warnings
 from gdalconst import *
 from subprocess import call
 from sklearn.neural_network import MLPClassifier
+from sklearn.ensemble import RandomForestClassifier
 
-warnings.filterwarnings("ignore",category =RuntimeWarning)
+warnings.filterwarnings("ignore")
 
 def open_image(directory):
     """
@@ -155,20 +156,29 @@ def classify_land_use(sa, tr):
     # print ts.groupby(by='lu_type_x').size()
     # print ts['lu_type_x'].astype('category')
     # print ts['lu_type_x'].describe()
-    print ts.pivot(index='lu_type_x', columns='Id').stack()
-    # print pd.melt(ts)
-    # print ts.to_panel()
-    # print ts.stack()
-
-
+    X = ts.pivot(index='lu_type_x', columns='Id').stack().iloc[:,5:]
+    # print X
     labels = ts['lu_type_x']
+    # X_PRED = sa.pivot(index='lu_type_x', columns='Id').stack().iloc[:,5:]
+    XP = sa.iloc[:,4:]
+    # print XP
 
     # print objects
     # create traininng objects
-    # clf = MLPClassifier()
-    # clf.fit(objects, labels)
+    clf = MLPClassifier()
+    # clf = RandomForestClassifier()
+    fit = clf.fit(X, labels)
+    pred = pd.DataFrame(clf.predict(XP), index=sa['Id'], columns=['class'])
+    print pred
+    # print len(pred)
+    # print len(sa)
+    # print pred.iloc[:,0].value_counts()
 
-    return
+    new = pd.merge(sa, pred, right_index=True, left_index=True)
+    # print len(new)
+    new.to_file('classified', driver='ESRI Shapefile')
+
+    return pred
 
 
 def main():
@@ -195,7 +205,11 @@ def main():
     study_area = extract_studyarea(poly_gird, obj)
     # poly_gird[poly_gird['lu_code'] != 0].to_file('tr', driver='ESRI Shapefile')
     # print poly_gird[poly_gird['lu_code']!=0]
-    classify_land_use(study_area, poly_gird)
+    lu = classify_land_use(study_area, poly_gird)
+
+    # cld = pd.merge(study_area, lu, left_index=True, right_index=True)
+    # print cld
+    # cld.to_file('study_area', driver='ESRI Shapefile')
 
 
 if __name__ == "__main__":
