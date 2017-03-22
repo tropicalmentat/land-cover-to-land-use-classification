@@ -2,12 +2,18 @@ import gdal
 import sys
 import time as tm
 import pandas as pd
+import geopandas as gpd
 import scipy.stats as st
 import numpy as np
-import numpy.ma as ma
+# import fiona
+# import numpy.ma as ma
 import os
+import warnings
 from gdalconst import *
 from subprocess import call
+from sklearn.neural_network import MLPClassifier
+
+warnings.filterwarnings("ignore",category =RuntimeWarning)
 
 def open_image(directory):
     """
@@ -98,10 +104,8 @@ def create_objects(image, grid):
     print 'image array has shape {}'.format(img_arr.shape)
     print 'grid array has shape {}'.format(grid_arr.shape)
     print 'image array nodata value: {}'.format(img_novalue)
-    # obj_id = pd.Series(np.unique(grid_arr))
-    # print img_arr[grid_arr==1851]
 
-    img_arr[img_arr>1] = np.nan
+    img_arr[img_arr>1] = np.nan  # mask out novalue pixels
     # mask = img_arr > 1
     # masked_arr = ma.array(img_arr, mask=mask)
     # print masked_arr
@@ -111,8 +115,9 @@ def create_objects(image, grid):
     # compute statistics for each object
     for i in np.unique(grid_arr):
         obj = img_arr[grid_arr==i]
-        # print st.describe(obj, nan_policy='omit')
         no_nan = obj[~np.isnan(obj)]
+        # filter out cells that have less than the minimum
+        # required pixels
         if len(no_nan) >= 9:
             result = st.describe(no_nan, nan_policy='omit')
             cell_id.append(i)
@@ -127,23 +132,70 @@ def create_objects(image, grid):
     return objects
 
 
+def extract_studyarea(df_1, df_2):
+    """
+    Extracts the study area by taking the intersection
+    of dataframes.
+    The geodataframe must be the left parameter.
+    """
+    sa = pd.merge(df_1, df_2, how='inner', left_on=['Id'], right_index=True)
+    # print sa
+    sa.to_file('study_area', driver='ESRI Shapefile')
+
+    return sa
+
+
+def classify_land_use(sa, tr):
+    """
+    Classifies land use
+    """
+
+    ts = pd.merge(tr[tr['lu_code'] != 0], sa, how='inner', on='Id')
+    # print ts
+    # print ts.groupby(by='lu_type_x').size()
+    # print ts['lu_type_x'].astype('category')
+    # print ts['lu_type_x'].describe()
+    print ts.pivot(index='lu_type_x', columns='Id').stack()
+    # print pd.melt(ts)
+    # print ts.to_panel()
+    # print ts.stack()
+
+
+    labels = ts['lu_type_x']
+
+    # print objects
+    # create traininng objects
+    # clf = MLPClassifier()
+    # clf.fit(objects, labels)
+
+    return
+
+
 def main():
     img_dir = "resampled.tif"
-    training_dir = ""
     poly_grid_dir = "landuse_grid100.shp"
-    grid_dir = "grid100.tif"
+    ras_grid_dir = "grid100.tif"
 
     img = open_image(img_dir)
     img_param = get_img_param(img)
 
-    lu_grid = open_image(grid_dir)
+    lu_grid = open_image(ras_grid_dir)
     lu_grid_param = get_img_param(lu_grid)
 
     # rasterize(poly_grid_dir, img_param)
 
     obj = create_objects(img, lu_grid)
-    #
-    # tr_sites = open_image(training_dir)
+    # print obj.index.values
+    # print obj
+
+    poly_gird = gpd.read_file(poly_grid_dir)
+    # print poly_gird['Id'].values
+    # print poly_gird
+
+    study_area = extract_studyarea(poly_gird, obj)
+    # poly_gird[poly_gird['lu_code'] != 0].to_file('tr', driver='ESRI Shapefile')
+    # print poly_gird[poly_gird['lu_code']!=0]
+    classify_land_use(study_area, poly_gird)
 
 
 if __name__ == "__main__":
