@@ -12,6 +12,7 @@ from gdalconst import *
 from subprocess import call
 from sklearn.neural_network import MLPClassifier
 from sklearn.ensemble import RandomForestClassifier
+from sklearn.metrics import confusion_matrix
 
 # warnings.filterwarnings("ignore")
 
@@ -161,6 +162,39 @@ def cull_no_data(gdf, df):
     return study_area
 
 
+def stratify_sample(train_grid):
+    """
+    randomly stratify training sites for confusion matrix
+    returns a tuple of Index objects, the left element
+    for the training samples, the right element for testing
+    to produce the confusion matrix
+    """
+
+    grouped_sxi = []
+    grouped_txi = []
+
+    for label, group in train_grid.groupby(by='lu_type'):
+        sxi = group.sample(frac=0.5).index
+        grouped_sxi.append(list(sxi))
+        # print sxi
+        # print '############################################'
+        txi = group.index.difference(sxi)
+        grouped_txi.append(list(txi))
+        # print '-----------------------------------------------'
+
+    unpacked_sxi = []
+    unpacked_txi = []
+    for group in grouped_sxi:
+        for xi in group:
+            unpacked_sxi.append(xi)
+
+    for group in grouped_txi:
+        for xi in group:
+            unpacked_txi.append(xi)
+
+    return pd.Index(unpacked_sxi), pd.Index(unpacked_txi)
+
+
 def classify_land_use(objects, grid):
     """
     Classifies land use.
@@ -168,33 +202,27 @@ def classify_land_use(objects, grid):
     grid: DataFrame containing data for classification
     """
 
+    # retrieve training cells from grid
     tr_grid = pd.merge(grid[grid['lu_code'] != 0], objects.loc[:,'min':],
                        right_index=True, left_index=True)
 
-    # randomly stratification of training sites for confusion matrix
-    sample_xi = []
-    test_xi = []
-    for label in tr_grid.groupby(by='lu_type')['Id']:
-        sxi = list(label[1].sample(frac=0.5).unique())
-        sample_xi.append(sxi)
-        txi = list(set(label[1].unique()).difference(sxi))
-        test_xi.append(txi)
+    sxi, txi = stratify_sample(tr_grid)
 
-    print sample_xi, len(sample_xi)
-    print test_xi, len(test_xi)
-
-    ############################################################################
-
-    tr_x = tr_grid.pivot(index='lu_type', columns='Id').stack().loc[:,'min':]
-    labels = tr_grid['lu_type']
+    tr_x = tr_grid.ix[sxi].pivot(index='lu_type', columns='Id').stack().loc[:,'min':]
+    labels = tr_grid.ix[sxi]['lu_type']
 
     x = objects.loc[:, 'min':]
 
     # create training grid
     clf = MLPClassifier(activation='relu')
-    # clf = RandomForestClassifier()
+    clf = RandomForestClassifier()
     fit = clf.fit(tr_x, labels)
     pred = pd.DataFrame(clf.predict(x), index=objects.index, columns=['lu_type'])
+
+    # confusion matrix
+    print labels.unique()
+    print confusion_matrix(tr_grid.ix[txi]['lu_type'], pred.ix[txi]['lu_type'],
+                           labels=labels.unique())
 
     # print pred
     new = pd.merge(grid, pred, right_index=True, left_index=True)
