@@ -220,10 +220,13 @@ def classify_land_use(objects, grid):
     pred = pd.DataFrame(clf.predict(x), index=objects.index, columns=['lu_type'])
 
     # confusion matrix
-    print labels.unique()
-    print confusion_matrix(tr_grid.ix[txi]['lu_type'], pred.ix[txi]['lu_type'],
-                           labels=labels.unique())
-
+    # print labels.unique()
+    # print confusion_matrix(tr_grid.ix[txi]['lu_type'], pred.ix[txi]['lu_type'],
+    #                        labels=labels.unique())
+    cm = pd.DataFrame(confusion_matrix(tr_grid.ix[txi]['lu_type'], pred.ix[txi]['lu_type'],
+                           labels=labels.unique()),
+                      index=labels.unique(), columns=labels.unique())
+    print cm
     # print pred
     new = pd.merge(grid, pred, right_index=True, left_index=True)
     new.to_file('classified', driver='ESRI Shapefile')
