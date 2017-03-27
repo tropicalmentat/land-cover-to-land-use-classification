@@ -13,6 +13,8 @@ from subprocess import call
 from sklearn.neural_network import MLPClassifier
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import confusion_matrix
+from sklearn.metrics import classification_report
+from sklearn.metrics import cohen_kappa_score
 
 # warnings.filterwarnings("ignore")
 
@@ -95,6 +97,8 @@ def create_objects(image, grid):
     reference for creating objects
 
     The image array and grid array must have the same shape.
+    Creates statistical objects for classification by computing
+    pixel statistics per grid cell.
     """
 
     img = image.GetRasterBand(1)
@@ -176,11 +180,8 @@ def stratify_sample(train_grid):
     for label, group in train_grid.groupby(by='lu_type'):
         sxi = group.sample(frac=0.5).index
         grouped_sxi.append(list(sxi))
-        # print sxi
-        # print '############################################'
         txi = group.index.difference(sxi)
         grouped_txi.append(list(txi))
-        # print '-----------------------------------------------'
 
     unpacked_sxi = []
     unpacked_txi = []
@@ -220,13 +221,20 @@ def classify_land_use(objects, grid):
     pred = pd.DataFrame(clf.predict(x), index=objects.index, columns=['lu_type'])
 
     # confusion matrix
-    # print labels.unique()
-    # print confusion_matrix(tr_grid.ix[txi]['lu_type'], pred.ix[txi]['lu_type'],
-    #                        labels=labels.unique())
-    cm = pd.DataFrame(confusion_matrix(tr_grid.ix[txi]['lu_type'], pred.ix[txi]['lu_type'],
-                           labels=labels.unique()),
-                      index=labels.unique(), columns=labels.unique())
+    pred_results = tr_grid.ix[txi]['lu_type']
+    tr_results = pred.ix[txi]['lu_type']
+    classes = labels.unique()
+
+    cm = pd.DataFrame(confusion_matrix(pred_results, tr_results,
+                           labels=classes),
+                      index=classes, columns=classes)
+
+    cr = classification_report(tr_results, pred_results, classes)
+    ks = cohen_kappa_score(tr_results, pred_results, classes)
     print cm
+    print cr
+    print 'kappa score: {}'.format(ks)
+
     # print pred
     new = pd.merge(grid, pred, right_index=True, left_index=True)
     new.to_file('classified', driver='ESRI Shapefile')
@@ -248,10 +256,8 @@ def main():
     # rasterize(poly_grid_dir, img_param)
 
     obj = create_objects(img, lu_grid)
-    # print type(obj)
 
     poly_grid = gpd.read_file(poly_grid_dir)
-    # print poly_grid.count()
 
     study_area = cull_no_data(poly_grid, obj)
 
