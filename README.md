@@ -8,6 +8,12 @@ In geographical literature, land-cover is generally understood as the physical c
 ## Land-use
 In contrast to land-cover, land-use is a description of how people use the land.
 
+## Preliminary Results
+
+![alt tag](https://github.com/tropicalmentat/land-cover-to-land-use-classification/blob/master/prelim%20land%20cover.png)
+
+![alt tag](https://github.com/tropicalmentat/land-cover-to-land-use-classification/blob/master/land-use%20classification.png)
+
 ### References
 
 Cihlar, J., & Jansen, L. (2001). From Land Cover to Land Use: A Methodology for Efficient Land Use Mapping over Large Areas. The Professional Geographer, 53(2), 275–289. https://doi.org/10.1111/0033-0124.00285
