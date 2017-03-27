@@ -10,6 +10,8 @@ In contrast to land-cover, land-use is a description of how people use the land.
 
 ## Preliminary Results
 
+![alt_tag](https://github.com/tropicalmentat/land-cover-to-land-use-classification/blob/master/general_workflow.png)
+
 ![alt tag](https://github.com/tropicalmentat/land-cover-to-land-use-classification/blob/master/prelim%20land%20cover.png)
 
 ![alt tag](https://github.com/tropicalmentat/land-cover-to-land-use-classification/blob/master/land-use%20classification.png)
