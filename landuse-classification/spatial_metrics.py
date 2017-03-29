@@ -36,6 +36,7 @@ def compute_sv(image, poly, aff):
 def landuse_is_profile(image, grid, poly_grid):
     """
     http://stackoverflow.com/questions/15408371/cumulative-distribution-plots-python
+    http://matplotlib.org/examples/statistics/histogram_demo_cumulative.html
 
     Cumulative frequency plots of impervious surfaces
     per training grid cell.
@@ -47,23 +48,29 @@ def landuse_is_profile(image, grid, poly_grid):
     pgrid = poly_grid
     tr_cell_i = pgrid[pgrid['lu_code']!= 0].index
 
+    # print len(tr_cell_i)
     # isolate training grid cells
-    for i in tr_cell_i:
+    for i, cell_i in enumerate(tr_cell_i):
 
         data[data>=1] = np.nan
-        cell_pix = data[grid==i]
-        cell_pix = cell_pix[~np.isnan(cell_pix)]
-        lu_type = pgrid.loc[i, 'lu_type']
+        cell_pix = data[grid==cell_i]
+        cell_pix = cell_pix[~np.isnan(cell_pix)] # filter out nodata pixels
+        lu_type = pgrid.loc[cell_i, 'lu_type']
 
         if len(cell_pix) > 0:
-            values, base = np.histogram(cell_pix, bins=40, range=(0., 1.), normed=True)
-            cf = np.cumsum(values)
+            scaler = MinMaxScaler()
+            cell_pix_norm = scaler.fit_transform(cell_pix)
+            fig, ax = plt.subplots()
+            n, bins, patches = ax.hist(cell_pix_norm, bins=50, histtype='step', normed=1,
+                                   cumulative=True, label='Empirical')
 
             #########################################
 
             # scaling
-            scaler = MinMaxScaler()
-            cf_norm = scaler.fit_transform(cf)
+
+            # cf_norm = scaler.fit_transform(cf)
+            mu = cell_pix_norm.mean()
+            sigma = cell_pix_norm.std()
 
             #########################################
 
@@ -80,13 +87,17 @@ def landuse_is_profile(image, grid, poly_grid):
             #########################################
 
             # plot
-            fig, ax = plt.subplots()
+            y = mlab.normpdf(bins, mu, sigma).cumsum()
+            y /= y[-1]
+            y[np.isnan(y)] = 0.
+            y_norm = scaler.fit_transform(y)
+
+            ax.plot(bins, y_norm, 'k--', linewidth=1.5, label='Theoretical')
             ax.set_ylabel('Cumulative frequency')
             ax.set_xlabel('Proportion impervious surface')
             ax.set_ylim([0., 1.2])
-            ax.set_xlim([0., 1.])
-            plt.plot(base[:-1], cf_norm)
-            plt.title(lu_type + ' ' + str(i))
+            ax.set_xlim([-0.2, 1.])
+            plt.title(str(lu_type) + ' ' + str(cell_i))
             plt.show()
 
     return
