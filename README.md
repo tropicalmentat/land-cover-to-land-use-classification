@@ -8,6 +8,9 @@ In geographical literature, land-cover is generally understood as the physical c
 ## Land-use
 In contrast to land-cover, land-use is a description of how people use the land. This is trickier to measure and classify than land-cover because of the complicating factor of human interpretation of what actually constitutes 'land-use.' Definitions of land-use differ according to location on the earth and depend on who defines 'use' for a particular patch of land (Comber, Fisher and Wadsworth, 2005). Moreover, a patch of land with a particular 'use' is, in many cases, be a composition of different kinds of land-cover (Cihlar & Jansen). Therefore, land-use cannot be directly measured via a scientific instrument unlike land-cover.
 
+## Methodology
+The uniqueness of land-use to particular locations can be exploited by combining human expertise with the advantages offered by machine learning algorithms.
+
 ## Preliminary Results
 
 ![alt_tag](https://github.com/tropicalmentat/land-cover-to-land-use-classification/blob/master/general_workflow.png)
