@@ -21,6 +21,8 @@ Impervious and pervious (vegetation and soil) surfaces can be encoded into numer
 
 ![alt tag](https://github.com/tropicalmentat/land-cover-to-land-use-classification/blob/master/land-use%20classification.png)
 
+## Accuracy Report
+
 |             | agricultural | commercial | industrial | mixed-use | residential |
 | --- | --- | --- | --- | --- | --- |
 |agricultural      |       4     |      0     |      0     |     0       |     0|
