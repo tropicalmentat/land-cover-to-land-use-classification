@@ -21,6 +21,25 @@ Impervious and pervious (vegetation and soil) surfaces can be encoded into numer
 
 ![alt tag](https://github.com/tropicalmentat/land-cover-to-land-use-classification/blob/master/land-use%20classification.png)
 
+|             | agricultural | commercial | industrial | mixed-use | residential |
+| --- | --- | --- | --- | --- | --- |
+|agricultural      |       4     |      0     |      0     |     0       |     0|
+|commercial         |      0      |     1      |     1     |     0       |     2|
+|industrial          |     0      |     0      |     1     |     0       |     0|
+|mixed-use           |     0       |    0      |     0     |     0       |     2|
+|residential       |       0       |    1       |    1     |     1        |    6|
+
+|              |precision  |  recall | f1-score  | support|
+|   ---           |---  |  --- | ---  | ---|
+|agricultural    |   1.00   |   1.00  |    1.00   |      4|
+|  commercial    |   0.25   |   0.50  |    0.33    |     2|
+|  industrial   |    1.00   |   0.33   |   0.50   |      3|
+|   mixed-use  |     0.00   |   0.00    |  0.00    |     1|
+| residential   |    0.67    |  0.60  |    0.63   |     10|
+| avg / total    |   0.71   |   0.60   |   0.62    |    20|
+
+
+
 ### References
 
 Cihlar, J., & Jansen, L. (2001). From Land Cover to Land Use: A Methodology for Efficient Land Use Mapping over Large Areas. The Professional Geographer, 53(2), 275–289. https://doi.org/10.1111/0033-0124.00285
