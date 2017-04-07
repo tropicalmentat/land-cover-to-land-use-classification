@@ -31,5 +31,8 @@ RIDD, M. K. (1995). Exploring a V-I-S (vegetation-impervious surface-soil) model
 
 Storper, M., & Scott, A. J. (2016). Current debates in urban theory: A critical assessment. Urban Studies, 53(6), 1114–1136. https://doi.org/10.1177/0042098016634002
 
+References on machine learning can be found here:
+https://github.com/josephmisiti/awesome-machine-learning/blob/master/books.md
+
 
 
