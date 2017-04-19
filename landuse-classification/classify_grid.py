@@ -214,30 +214,36 @@ def classify_land_use(objects, grid):
 
     x = objects.loc[:, 'min':]
 
-    # create training grid
-    clf = MLPClassifier(activation='relu')
-    clf = RandomForestClassifier()
-    fit = clf.fit(tr_x, labels)
-    pred = pd.DataFrame(clf.predict(x), index=objects.index, columns=['lu_type'])
+    # iterate through different classifier parameters
+    mlp_act = ['relu',
+               'logistic',
+               'tanh',
+               'identity']
 
-    # confusion matrix
-    pred_results = tr_grid.ix[txi]['lu_type']
-    tr_results = pred.ix[txi]['lu_type']
-    classes = labels.unique()
+    for act_func in mlp_act:
 
-    cm = pd.DataFrame(confusion_matrix(pred_results, tr_results,
-                           labels=classes),
-                      index=classes, columns=classes)
+        clf = MLPClassifier(activation=act_func)
+        fit = clf.fit(tr_x, labels)
+        pred = pd.DataFrame(clf.predict(x), index=objects.index, columns=['lu_type'])
 
-    cr = classification_report(tr_results, pred_results, classes)
-    ks = cohen_kappa_score(tr_results, pred_results, classes)
-    print cm
-    print cr
-    print 'kappa score: {}'.format(ks)
+        # confusion matrix
+        pred_results = tr_grid.ix[txi]['lu_type']
+        tr_results = pred.ix[txi]['lu_type']
+        classes = labels.unique()
 
-    # print pred
-    new = pd.merge(grid, pred, right_index=True, left_index=True)
-    new.to_file('classified', driver='ESRI Shapefile')
+        cm = pd.DataFrame(confusion_matrix(pred_results, tr_results,
+                               labels=classes),
+                          index=classes, columns=classes)
+
+        cr = classification_report(tr_results, pred_results, classes)
+        ks = cohen_kappa_score(tr_results, pred_results, classes)
+        print cm
+        print cr
+        print 'kappa score: {}'.format(ks)
+
+        # print pred
+        new = pd.merge(grid, pred, right_index=True, left_index=True)
+        new.to_file('classified_' + act_func, driver='ESRI Shapefile')
 
     return #pred
 
