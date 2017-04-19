@@ -214,36 +214,42 @@ def classify_land_use(objects, grid):
 
     x = objects.loc[:, 'min':]
 
-    # iterate through different classifier parameters
+    # iterate through different mlp classifier parameters
     mlp_act = ['relu',
                'logistic',
                'tanh',
                'identity']
+    solvers = ['lbfgs',
+              'sgd',
+              'adam']
 
     for act_func in mlp_act:
+        for sol in solvers:
+            print 'using {} activation function and {} solver.'.format(act_func,sol)
+            clf = MLPClassifier(activation=act_func, solver=sol)
+            fit = clf.fit(tr_x, labels)
+            pred = pd.DataFrame(clf.predict(x), index=objects.index, columns=['lu_type'])
 
-        clf = MLPClassifier(activation=act_func)
-        fit = clf.fit(tr_x, labels)
-        pred = pd.DataFrame(clf.predict(x), index=objects.index, columns=['lu_type'])
+            # confusion matrix
+            pred_results = tr_grid.ix[txi]['lu_type']
+            tr_results = pred.ix[txi]['lu_type']
+            classes = labels.unique()
 
-        # confusion matrix
-        pred_results = tr_grid.ix[txi]['lu_type']
-        tr_results = pred.ix[txi]['lu_type']
-        classes = labels.unique()
+            cm = pd.DataFrame(confusion_matrix(pred_results, tr_results,
+                                   labels=classes),
+                              index=classes, columns=classes)
 
-        cm = pd.DataFrame(confusion_matrix(pred_results, tr_results,
-                               labels=classes),
-                          index=classes, columns=classes)
+            cr = classification_report(tr_results, pred_results, classes)
+            ks = cohen_kappa_score(tr_results, pred_results, classes)
+            print cm
+            print cr
+            print 'kappa score: {}'.format(ks)
 
-        cr = classification_report(tr_results, pred_results, classes)
-        ks = cohen_kappa_score(tr_results, pred_results, classes)
-        print cm
-        print cr
-        print 'kappa score: {}'.format(ks)
-
-        # print pred
-        new = pd.merge(grid, pred, right_index=True, left_index=True)
-        new.to_file('classified_' + act_func, driver='ESRI Shapefile')
+            # print pred
+            new = pd.merge(grid, pred, right_index=True, left_index=True)
+            new.to_file('classified_' + act_func + '_' + sol
+                        , driver='ESRI Shapefile')
+            print '-----------------------------------------------------------------'
 
     return #pred
 
