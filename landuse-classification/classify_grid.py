@@ -174,26 +174,30 @@ def stratify_sample(train_grid):
     to produce the confusion matrix
     """
 
-    grouped_sxi = []
-    grouped_txi = []
+    grouped_trxi = []  # indices of training samples
+    grouped_tsxi = []  # indices of test samples
 
+    # splits the samples into two groups by
+    # performing random sampling on half the samples
+    # uses set operations to determine the indices
+    # of the other half for testing
     for label, group in train_grid.groupby(by='lu_type'):
         sxi = group.sample(frac=0.5).index
-        grouped_sxi.append(list(sxi))
+        grouped_trxi.append(list(sxi))
         txi = group.index.difference(sxi)
-        grouped_txi.append(list(txi))
+        grouped_tsxi.append(list(txi))
 
-    unpacked_sxi = []
-    unpacked_txi = []
-    for group in grouped_sxi:
+    unpacked_trxi = []
+    unpacked_tsxi = []
+    for group in grouped_trxi:
         for xi in group:
-            unpacked_sxi.append(xi)
+            unpacked_trxi.append(xi)
 
-    for group in grouped_txi:
+    for group in grouped_tsxi:
         for xi in group:
-            unpacked_txi.append(xi)
+            unpacked_tsxi.append(xi)
 
-    return pd.Index(unpacked_sxi), pd.Index(unpacked_txi)
+    return pd.Index(unpacked_trxi), pd.Index(unpacked_tsxi)
 
 
 def classify_land_use(objects, grid):
@@ -207,10 +211,10 @@ def classify_land_use(objects, grid):
     tr_grid = pd.merge(grid[grid['lu_code'] != 0], objects.loc[:,'min':],
                        right_index=True, left_index=True)
 
-    sxi, txi = stratify_sample(tr_grid)
+    trxi, tsxi = stratify_sample(tr_grid)
 
-    tr_x = tr_grid.ix[sxi].pivot(index='lu_type', columns='Id').stack().loc[:,'min':]
-    labels = tr_grid.ix[sxi]['lu_type']
+    tr_x = tr_grid.ix[trxi].pivot(index='lu_type', columns='Id').stack().loc[:,'min':]
+    labels = tr_grid.ix[trxi]['lu_type']
 
     x = objects.loc[:, 'min':]
 
@@ -219,6 +223,7 @@ def classify_land_use(objects, grid):
                'logistic',
                'tanh',
                'identity']
+
     solvers = ['lbfgs',
               'sgd',
               'adam']
@@ -227,23 +232,32 @@ def classify_land_use(objects, grid):
         for sol in solvers:
             print 'using {} activation function and {} solver.'.format(act_func,sol)
             clf = MLPClassifier(activation=act_func, solver=sol)
-            fit = clf.fit(tr_x, labels)
+            clf.fit(tr_x, labels)
             pred = pd.DataFrame(clf.predict(x), index=objects.index, columns=['lu_type'])
 
             # confusion matrix
-            pred_results = tr_grid.ix[txi]['lu_type']
-            tr_results = pred.ix[txi]['lu_type']
+            pred_results = tr_grid.ix[trxi]['lu_type']
+            tr_results = pred.ix[trxi]['lu_type']
             classes = labels.unique()
 
-            cm = pd.DataFrame(confusion_matrix(pred_results, tr_results,
-                                   labels=classes),
-                              index=classes, columns=classes)
+            # print np.array(pred_results)
+            # print tr_results
+            print '------------'
+            # cm = pd.DataFrame(confusion_matrix(pred_results, tr_results,
+            #                        labels=classes),
+            #                   index=classes, columns=classes)
+            #
+            cm2 = pd.crosstab(np.array(pred_results),
+                              np.array(tr_results),
+                              margins=True)
+            #
+            # cr = classification_report(tr_results, pred_results, classes)
+            # # ks = cohen_kappa_score(tr_results, pred_results, classes)
+            # print cm
+            print cm2
+            # print cr
 
-            cr = classification_report(tr_results, pred_results, classes)
-            ks = cohen_kappa_score(tr_results, pred_results, classes)
-            print cm
-            print cr
-            print 'kappa score: {}'.format(ks)
+            # print 'kappa score: {}'.format(ks)
 
             # print pred
             new = pd.merge(grid, pred, right_index=True, left_index=True)
