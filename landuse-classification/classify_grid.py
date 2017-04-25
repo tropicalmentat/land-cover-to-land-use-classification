@@ -6,12 +6,14 @@ import geopandas as gpd
 import scipy.stats as st
 import numpy as np
 import os
+import shutil
 import random
 import warnings
 from gdalconst import *
 from subprocess import call
 from sklearn.neural_network import MLPClassifier
 from sklearn.ensemble import RandomForestClassifier
+from sklearn import svm
 from sklearn.metrics import confusion_matrix
 from sklearn.metrics import classification_report
 from sklearn.metrics import cohen_kappa_score
@@ -228,8 +230,18 @@ def classify_land_use(objects, grid):
               'sgd',
               'adam']
 
+    # create directory for accuracy reports
+    ar_path = os.getcwd() + '//accuracy_reports'
+
+    if os.path.exists(ar_path):
+        print 'path exists! deleting path'
+        shutil.rmtree(ar_path)
+
+    os.mkdir(ar_path)
+
     for act_func in mlp_act:
         for sol in solvers:
+            print '------------------------------------------'
             print 'using {} activation function and {} solver.'.format(act_func,sol)
             clf = MLPClassifier(activation=act_func, solver=sol)
             clf.fit(tr_x, labels)
@@ -242,7 +254,7 @@ def classify_land_use(objects, grid):
 
             # print np.array(pred_results)
             # print tr_results
-            print '------------'
+
             # cm = pd.DataFrame(confusion_matrix(pred_results, tr_results,
             #                        labels=classes),
             #                   index=classes, columns=classes)
@@ -250,7 +262,9 @@ def classify_land_use(objects, grid):
             cm2 = pd.crosstab(np.array(pred_results),
                               np.array(tr_results),
                               margins=True)
-            #
+            cm2_fn = ar_path + '//' + act_func + '_' + sol + '.csv'
+            cm2.to_csv(cm2_fn)
+
             # cr = classification_report(tr_results, pred_results, classes)
             # # ks = cohen_kappa_score(tr_results, pred_results, classes)
             # print cm
@@ -263,7 +277,7 @@ def classify_land_use(objects, grid):
             new = pd.merge(grid, pred, right_index=True, left_index=True)
             new.to_file('classified_' + act_func + '_' + sol
                         , driver='ESRI Shapefile')
-            print '-----------------------------------------------------------------'
+            print '==========================================='
 
     return #pred
 
