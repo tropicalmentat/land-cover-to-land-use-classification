@@ -1,22 +1,29 @@
+# issues
+
+# for saving .prj for output geodataframe
+# https://gis.stackexchange.com/questions/204201/geopandas-to-file-saves-geodataframe-without-coordinate-system
+# https://github.com/geopandas/geopandas/issues/363
+
+# to save classification report
+# http://stackoverflow.com/questions/28200786/how-to-plot-scikit-learn-classification-report
+
 import gdal
 import sys
+import os
+import shutil
+import warnings
 import time as tm
 import pandas as pd
 import geopandas as gpd
 import scipy.stats as st
 import numpy as np
-import os
-import shutil
-import random
-import warnings
 from gdalconst import *
 from subprocess import call
 from sklearn.neural_network import MLPClassifier
+from sklearn.tree import DecisionTreeClassifier
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.svm import SVC
-from sklearn.metrics import confusion_matrix
 from sklearn.metrics import classification_report
-from sklearn.metrics import cohen_kappa_score
 
 # warnings.filterwarnings("ignore")
 
@@ -179,10 +186,11 @@ def stratify_sample(train_grid):
     grouped_trxi = []  # indices of training samples
     grouped_tsxi = []  # indices of test samples
 
-    # splits the samples into two groups by
+    # splits the samples into two sets by
     # performing random sampling on half the samples
+    # then
     # uses set operations to determine the indices
-    # of the other half for testing
+    # of the other half for model testing
     for label, group in train_grid.groupby(by='lu_type'):
         sxi = group.sample(frac=0.5).index
         grouped_trxi.append(list(sxi))
@@ -222,17 +230,18 @@ def classify_land_use(objects, grid):
 
     # list of classifiers
     names = [
-            'Neural net',
-            'Random Forest',
-            'Linear SVM'
+            'neural_net',
+            'decision_tree',
+            'random_forest',
+            'linear_svm'
              ]
 
     clfs = [
             MLPClassifier(),
-            RandomForestClassifier(n_estimators=500, oob_score=True),
-            SVC(kernel='rbf')
+            DecisionTreeClassifier(),
+            RandomForestClassifier(n_estimators=1000, oob_score=True),
+            SVC(kernel='linear')
            ]
-
 
     # create directory for accuracy reports
     ar_path = os.getcwd() + '//accuracy_reports'
@@ -245,17 +254,20 @@ def classify_land_use(objects, grid):
 
     for name, clf in zip(names, clfs):
 
-        if name == 'Neural net':
+        if name == 'neural_net':
 
             # iterate through different mlp classifier parameters
-            mlp_act = ['relu',
+            mlp_act = [
+                       'relu',
                        'logistic',
                        'tanh',
-                       'identity']
+                       'identity'
+                       ]
 
-            solvers = ['lbfgs',
+            solvers = [
+                       'lbfgs',
                        'sgd',
-                       'adam']
+                      ]
 
             for act_func in mlp_act:
                 for solver in solvers:
@@ -275,13 +287,14 @@ def classify_land_use(objects, grid):
                                               np.array(tr_results),
                                               margins=True)
 
-                    conf_matrix_fn = ar_path + '//' + act_func + '_' + solver + '.csv'
+                    conf_matrix_fn = ar_path + '//' + name + '_' + \
+                                     act_func + '_' + solver + '.csv'
                     conf_matrix.to_csv(conf_matrix_fn)
 
                     cr = classification_report(tr_results, pred_results, classes)
                     print cr
-                    new = pd.merge(grid, pred, right_index=True, left_index=True)
-                    new.to_file('classified_' + act_func + '_' + solver
+                    clf_grid = pd.merge(grid, pred, right_index=True, left_index=True)
+                    clf_grid.to_file('classified_' + name + '_' + act_func + '_' + solver
                                 , driver='ESRI Shapefile')
 
                     print '=========================================================='

@@ -30,4 +30,5 @@ IMAGES/WORLDVIEW 2/WORKING FILES/pansharp_ground_control.txt
 *.lyr
 *.evf
 *.vrt
+*.csv
 *.png
