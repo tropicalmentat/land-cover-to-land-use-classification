@@ -13,7 +13,7 @@ from gdalconst import *
 from subprocess import call
 from sklearn.neural_network import MLPClassifier
 from sklearn.ensemble import RandomForestClassifier
-from sklearn import svm
+from sklearn.svm import SVC
 from sklearn.metrics import confusion_matrix
 from sklearn.metrics import classification_report
 from sklearn.metrics import cohen_kappa_score
@@ -220,15 +220,19 @@ def classify_land_use(objects, grid):
 
     x = objects.loc[:, 'min':]
 
-    # iterate through different mlp classifier parameters
-    mlp_act = ['relu',
-               'logistic',
-               'tanh',
-               'identity']
+    # list of classifiers
+    names = [
+            'Neural net',
+            'Random Forest',
+            'Linear SVM'
+             ]
 
-    solvers = ['lbfgs',
-              'sgd',
-              'adam']
+    clfs = [
+            MLPClassifier(),
+            RandomForestClassifier(n_estimators=500, oob_score=True),
+            SVC(kernel='rbf')
+           ]
+
 
     # create directory for accuracy reports
     ar_path = os.getcwd() + '//accuracy_reports'
@@ -239,52 +243,83 @@ def classify_land_use(objects, grid):
 
     os.mkdir(ar_path)
 
-    for act_func in mlp_act:
-        for sol in solvers:
-            print '------------------------------------------'
-            print 'using {} activation function and {} solver.'.format(act_func,sol)
-            clf = MLPClassifier(activation=act_func, solver=sol)
-            clf.fit(tr_x, labels)
-            pred = pd.DataFrame(clf.predict(x), index=objects.index, columns=['lu_type'])
+    for name, clf in zip(names, clfs):
+
+        if name == 'Neural net':
+
+            # iterate through different mlp classifier parameters
+            mlp_act = ['relu',
+                       'logistic',
+                       'tanh',
+                       'identity']
+
+            solvers = ['lbfgs',
+                       'sgd',
+                       'adam']
+
+            for act_func in mlp_act:
+                for solver in solvers:
+                    print '=========================================================='
+
+                    print 'using {} activation function and {} solver.'.format(act_func, solver)
+                    classifier = MLPClassifier(activation=act_func, solver=solver)
+                    classifier.fit(tr_x, labels)
+                    pred = pd.DataFrame(classifier.predict(x), index=objects.index, columns=['lu_type'])
+
+                    # confusion matrix
+                    pred_results = tr_grid.ix[trxi]['lu_type']
+                    tr_results = pred.ix[trxi]['lu_type']
+                    classes = labels.unique()
+
+                    conf_matrix = pd.crosstab(np.array(pred_results),
+                                              np.array(tr_results),
+                                              margins=True)
+
+                    conf_matrix_fn = ar_path + '//' + act_func + '_' + solver + '.csv'
+                    conf_matrix.to_csv(conf_matrix_fn)
+
+                    cr = classification_report(tr_results, pred_results, classes)
+                    print cr
+                    new = pd.merge(grid, pred, right_index=True, left_index=True)
+                    new.to_file('classified_' + act_func + '_' + solver
+                                , driver='ESRI Shapefile')
+
+                    print '=========================================================='
+        else:
+            print '=========================================================='
+
+            print 'using {} classifier.'.format(name)
+            classifier = clf
+            classifier.fit(tr_x, labels)
+            pred = pd.DataFrame(classifier.predict(x), index=objects.index, columns=['lu_type'])
 
             # confusion matrix
             pred_results = tr_grid.ix[trxi]['lu_type']
             tr_results = pred.ix[trxi]['lu_type']
             classes = labels.unique()
 
-            # print np.array(pred_results)
-            # print tr_results
+            conf_matrix = pd.crosstab(np.array(pred_results),
+                                      np.array(tr_results),
+                                      margins=True)
 
-            # cm = pd.DataFrame(confusion_matrix(pred_results, tr_results,
-            #                        labels=classes),
-            #                   index=classes, columns=classes)
-            #
-            cm2 = pd.crosstab(np.array(pred_results),
-                              np.array(tr_results),
-                              margins=True)
-            cm2_fn = ar_path + '//' + act_func + '_' + sol + '.csv'
-            cm2.to_csv(cm2_fn)
+            conf_matrix_fn = ar_path + '//' + name + '.csv'
+            conf_matrix.to_csv(conf_matrix_fn)
 
-            # cr = classification_report(tr_results, pred_results, classes)
-            # # ks = cohen_kappa_score(tr_results, pred_results, classes)
-            # print cm
-            print cm2
-            # print cr
-
-            # print 'kappa score: {}'.format(ks)
-
-            # print pred
+            cr = classification_report(tr_results, pred_results, classes)
+            print cr
             new = pd.merge(grid, pred, right_index=True, left_index=True)
-            new.to_file('classified_' + act_func + '_' + sol
-                        , driver='ESRI Shapefile')
-            print '==========================================='
+            new.to_file('classified_' +
+                        name,
+                        driver='ESRI Shapefile')
 
-    return #pred
+            print '=========================================================='
+
+    return
 
 
 def main():
     img_dir = "resampled.tif"
-    poly_grid_dir = "landuse_grid100.shp"
+    poly_grid_dir = "G:\LUIGI\ICLEI\IMAGE PROCESSING\\2. LAND USE CLASSIFICATION\landuse grids\landuse_grid100_t2.shp"
     ras_grid_dir = "grid100.tif"
 
     img = open_image(img_dir)
