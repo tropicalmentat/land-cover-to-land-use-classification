@@ -210,122 +210,133 @@ def stratify_sample(train_grid):
     return pd.Index(unpacked_trxi), pd.Index(unpacked_tsxi)
 
 
-def classify_land_use(objects, grid):
+def classify_land_use(objects, grid, xp_trials=1):
     """
     Classifies land use.
     objects: GeoDataFrame of the polygon objects
     grid: DataFrame containing data for classification
     """
 
-    # retrieve training cells from grid
-    tr_grid = pd.merge(grid[grid['lu_code'] != 0], objects.loc[:,'min':],
-                       right_index=True, left_index=True)
+    for trial in range(xp_trials):
+        # create directory for experiment trial
+        xp_path = os.getcwd() + '\\trial_' + str(trial)
 
-    trxi, tsxi = stratify_sample(tr_grid)
+        if os.path.exists(xp_path):
+            print 'path exists! deleting path'
+            shutil.rmtree(xp_path)
 
-    tr_x = tr_grid.ix[trxi].pivot(index='lu_type', columns='Id').stack().loc[:,'min':]
-    labels = tr_grid.ix[trxi]['lu_type']
+        os.mkdir(xp_path)
 
-    x = objects.loc[:, 'min':]
+        # retrieve training cells from grid
+        tr_grid = pd.merge(grid[grid['lu_code'] != 0], objects.loc[:,'min':],
+                           right_index=True, left_index=True)
 
-    # list of classifiers
-    names = [
-            'neural_net',
-            'decision_tree',
-            'random_forest',
-            'linear_svm'
-             ]
+        trxi, tsxi = stratify_sample(tr_grid)
 
-    clfs = [
-            MLPClassifier(),
-            DecisionTreeClassifier(),
-            RandomForestClassifier(n_estimators=1000, oob_score=True),
-            SVC(kernel='linear')
-           ]
+        tr_x = tr_grid.ix[trxi].pivot(index='lu_type', columns='Id').stack().loc[:,'min':]
+        labels = tr_grid.ix[trxi]['lu_type']
 
-    # create directory for accuracy reports
-    ar_path = os.getcwd() + '//accuracy_reports'
+        x = objects.loc[:, 'min':]
 
-    if os.path.exists(ar_path):
-        print 'path exists! deleting path'
-        shutil.rmtree(ar_path)
+        # list of classifiers
+        names = [
+                'neural_net',
+                'decision_tree',
+                'random_forest',
+                'linear_svm'
+                 ]
 
-    os.mkdir(ar_path)
+        clfs = [
+                MLPClassifier(),
+                DecisionTreeClassifier(),
+                RandomForestClassifier(n_estimators=1000, oob_score=True),
+                SVC(kernel='linear')
+               ]
 
-    for name, clf in zip(names, clfs):
+        # create directory for accuracy reports
+        ar_path = xp_path + '\\accuracy_reports'
 
-        if name == 'neural_net':
+        # if os.path.exists(ar_path):
+        #     print 'path exists! deleting path'
+        #     shutil.rmtree(ar_path)
+        #
+        os.mkdir(ar_path)
 
-            # iterate through different mlp classifier parameters
-            mlp_act = [
-                       'relu',
-                       'logistic',
-                       'tanh',
-                       'identity'
-                       ]
+        for name, clf in zip(names, clfs):
 
-            solvers = [
-                       'lbfgs',
-                       'sgd',
-                      ]
+            if name == 'neural_net':
 
-            for act_func in mlp_act:
-                for solver in solvers:
-                    print '=========================================================='
+                # iterate through different mlp classifier parameters
+                mlp_act = [
+                           'relu',
+                           'logistic',
+                           'tanh',
+                           'identity'
+                           ]
 
-                    print 'using {} activation function and {} solver.'.format(act_func, solver)
-                    classifier = MLPClassifier(activation=act_func, solver=solver)
-                    classifier.fit(tr_x, labels)
-                    pred = pd.DataFrame(classifier.predict(x), index=objects.index, columns=['lu_type'])
+                solvers = [
+                           'lbfgs',
+                           'sgd',
+                          ]
 
-                    # confusion matrix
-                    pred_results = tr_grid.ix[trxi]['lu_type']
-                    tr_results = pred.ix[trxi]['lu_type']
-                    classes = labels.unique()
+                for act_func in mlp_act:
+                    for solver in solvers:
+                        print '=========================================================='
 
-                    conf_matrix = pd.crosstab(np.array(pred_results),
-                                              np.array(tr_results),
-                                              margins=True)
+                        print 'using {} activation function and {} solver.'.format(act_func, solver)
+                        classifier = MLPClassifier(activation=act_func, solver=solver)
+                        classifier.fit(tr_x, labels)
+                        pred = pd.DataFrame(classifier.predict(x), index=objects.index, columns=['lu_type'])
 
-                    conf_matrix_fn = ar_path + '//' + name + '_' + \
-                                     act_func + '_' + solver + '.csv'
-                    conf_matrix.to_csv(conf_matrix_fn)
+                        # confusion matrix
+                        pred_results = tr_grid.ix[trxi]['lu_type']
+                        tr_results = pred.ix[trxi]['lu_type']
+                        classes = labels.unique()
 
-                    cr = classification_report(tr_results, pred_results, classes)
-                    print cr
-                    clf_grid = pd.merge(grid, pred, right_index=True, left_index=True)
-                    clf_grid.to_file('classified_' + name + '_' + act_func + '_' + solver
-                                , driver='ESRI Shapefile')
+                        conf_matrix = pd.crosstab(np.array(pred_results),
+                                                  np.array(tr_results),
+                                                  margins=True)
 
-                    print '=========================================================='
-        else:
-            print '=========================================================='
+                        conf_matrix_fn = ar_path + '\\' + name + '_' + \
+                                         act_func + '_' + solver + '.csv'
+                        conf_matrix.to_csv(conf_matrix_fn)
 
-            print 'using {} classifier.'.format(name)
-            classifier = clf
-            classifier.fit(tr_x, labels)
-            pred = pd.DataFrame(classifier.predict(x), index=objects.index, columns=['lu_type'])
+                        cr = classification_report(tr_results, pred_results, classes)
+                        print cr
+                        clf_grid = pd.merge(grid, pred, right_index=True, left_index=True)
+                        clf_grid_path = xp_path + '\\classified_' + name + '_' + act_func + '_' + solver
+                        clf_grid.to_file(clf_grid_path
+                                    , driver='ESRI Shapefile')
 
-            # confusion matrix
-            pred_results = tr_grid.ix[trxi]['lu_type']
-            tr_results = pred.ix[trxi]['lu_type']
-            classes = labels.unique()
+                        print '=========================================================='
+            else:
+                print '=========================================================='
 
-            conf_matrix = pd.crosstab(np.array(pred_results),
-                                      np.array(tr_results),
-                                      margins=True)
+                print 'using {} classifier.'.format(name)
+                classifier = clf
+                classifier.fit(tr_x, labels)
+                pred = pd.DataFrame(classifier.predict(x), index=objects.index, columns=['lu_type'])
 
-            conf_matrix_fn = ar_path + '//' + name + '.csv'
-            conf_matrix.to_csv(conf_matrix_fn)
+                # confusion matrix
+                pred_results = tr_grid.ix[trxi]['lu_type']
+                tr_results = pred.ix[trxi]['lu_type']
+                classes = labels.unique()
 
-            cr = classification_report(tr_results, pred_results, classes)
-            print cr
-            new = pd.merge(grid, pred, right_index=True, left_index=True)
-            new.to_file('classified_' +
-                        name,
-                        driver='ESRI Shapefile')
+                conf_matrix = pd.crosstab(np.array(pred_results),
+                                          np.array(tr_results),
+                                          margins=True)
 
-            print '=========================================================='
+                conf_matrix_fn = ar_path + '//' + name + '.csv'
+                conf_matrix.to_csv(conf_matrix_fn)
+
+                cr = classification_report(tr_results, pred_results, classes)
+                print cr
+                new = pd.merge(grid, pred, right_index=True, left_index=True)
+                new.to_file('classified_' +
+                            name,
+                            driver='ESRI Shapefile')
+
+                print '=========================================================='
 
     return
 
@@ -349,7 +360,7 @@ def main():
 
     study_area = cull_no_data(poly_grid, obj)
 
-    lu = classify_land_use(study_area, poly_grid)
+    classify_land_use(study_area, poly_grid, 2)
 
 
 if __name__ == "__main__":
