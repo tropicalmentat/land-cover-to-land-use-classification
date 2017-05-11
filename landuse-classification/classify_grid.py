@@ -293,16 +293,23 @@ def classify_land_use(objects, grid, xp_trials=1):
                         tr_results = pred.ix[trxi]['lu_type']
                         classes = labels.unique()
 
-                        conf_matrix = pd.crosstab(np.array(pred_results),
-                                                  np.array(tr_results),
-                                                  margins=True)
+                        matrix = pd.DataFrame()
 
+                        matrix['truth'] = tr_results
+                        matrix['predict'] = pred_results
+
+                        conf_matrix = pd.crosstab(matrix['truth'], matrix['predict']
+                                                  , margins=True)
+                        print conf_matrix
                         conf_matrix_fn = ar_path + '\\' + name + '_' + \
-                                         act_func + '_' + solver + '.csv'
-                        conf_matrix.to_csv(conf_matrix_fn)
+                                         act_func + '_' + solver + '.xlsx'
+
+                        writer = pd.ExcelWriter(conf_matrix_fn)
+                        conf_matrix.to_excel(writer, 'Sheet1')
+                        writer.save()
 
                         cr = classification_report(tr_results, pred_results, classes)
-                        print cr
+                        # print cr
                         clf_grid = pd.merge(grid, pred, right_index=True, left_index=True)
                         clf_grid_path = xp_path + '\\classified_' + name + '_' + act_func + '_' + solver
                         clf_grid.to_file(clf_grid_path
@@ -322,15 +329,24 @@ def classify_land_use(objects, grid, xp_trials=1):
                 tr_results = pred.ix[trxi]['lu_type']
                 classes = labels.unique()
 
-                conf_matrix = pd.crosstab(np.array(pred_results),
-                                          np.array(tr_results),
-                                          margins=True)
+                matrix = pd.DataFrame()
 
-                conf_matrix_fn = ar_path + '//' + name + '.csv'
-                conf_matrix.to_csv(conf_matrix_fn)
+                matrix['truth'] = tr_results
+                matrix['predict'] = pred_results
 
+                conf_matrix = pd.crosstab(matrix['truth'], matrix['predict']
+                                          , margins=True)
+
+                conf_matrix_fn = ar_path + '\\' + name + '_' + \
+                                 '.xlsx'
+
+                writer = pd.ExcelWriter(conf_matrix_fn)
+                conf_matrix.to_excel(writer, 'Sheet1')
+                writer.save()
+
+                print conf_matrix
                 cr = classification_report(tr_results, pred_results, classes)
-                print cr
+                # print cr
                 new = pd.merge(grid, pred, right_index=True, left_index=True)
                 new.to_file('classified_' +
                             name,
