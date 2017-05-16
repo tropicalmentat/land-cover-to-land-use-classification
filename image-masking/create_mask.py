@@ -147,7 +147,7 @@ def main():
     start = tm.time()
 
     # Worldview2
-    img_fn = "vegetation-impervious_clip.tif"
+    img_fn = "landcover_3_clip_reclass_clip.tif"
     poly_fn = "urban_mask.shp"
 
     # Landsat
@@ -165,7 +165,7 @@ def main():
 
     wv2_param = get_img_param(img)
 
-    rasterize_mask(poly_fn, wv2_param)
+    # rasterize_mask(poly_fn, wv2_param)
 
     # collect all bands
     b_list = {}
@@ -177,7 +177,7 @@ def main():
     for f in glob.glob(cwd + '\*_mask.tif'):  # search for the .tif file of the mask
         mask_img = gdal.Open(f, GA_ReadOnly)
         band_mask = mask_img.GetRasterBand(1)
-        mask_image(b_list, band_mask, wv2_param, 'pervious-impervious_masked.tif')
+        mask_image(b_list, band_mask, wv2_param, 'landsat_urban_masked.tif')
 
     # compress image
     for f in glob.glob(cwd + '\*_masked.tif'):

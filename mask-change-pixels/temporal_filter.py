@@ -223,7 +223,6 @@ def temporal_mask(X, Y, Y_img_param, data_to_disk=True, num_iter=1, std_mult=2.0
 
         # create random test samples
         test_sample_x = np.random.rand(training_sample_x.shape[0])
-        print test_sample_x
 
         model = slope * test_sample_x + intercept
 

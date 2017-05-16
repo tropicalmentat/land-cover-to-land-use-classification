@@ -25,7 +25,6 @@ def compute_sv(image, poly, aff):
     """
 
     data = image.read(1)
-    # dm = np.where(data < 3, data, np.nan)
 
     zs = rs.zonal_stats(poly, data, affine=aff)
     print zs
@@ -42,7 +41,6 @@ def landuse_is_profile(image, grid, poly_grid):
     per training grid cell.
     """
 
-
     data = image.read(1)
     grid = grid.read(1)
     pgrid = poly_grid
@@ -57,18 +55,21 @@ def landuse_is_profile(image, grid, poly_grid):
         cell_pix = cell_pix[~np.isnan(cell_pix)] # filter out nodata pixels
         lu_type = pgrid.loc[cell_i, 'lu_type']
 
+        # plt.subplot()
         if len(cell_pix) > 0:
+
+            # scale cell pixels from (0,1)
             scaler = MinMaxScaler()
             cell_pix_norm = scaler.fit_transform(cell_pix)
-            fig, ax = plt.subplots()
-            n, bins, patches = ax.hist(cell_pix_norm, bins=50, histtype='step', normed=1,
-                                   cumulative=True, label='Empirical')
+
+            plt.figure()
+            plt.subplot()
+            n, bins, patches = plt.hist(cell_pix_norm, bins=50, histtype='step', normed=1,
+                                   cumulative=True, facecolor='g', label='Empirical')
 
             #########################################
 
-            # scaling
-
-            # cf_norm = scaler.fit_transform(cf)
+            # cumulative frequency plotting parameters
             mu = cell_pix_norm.mean()
             sigma = cell_pix_norm.std()
 
@@ -87,18 +88,22 @@ def landuse_is_profile(image, grid, poly_grid):
             #########################################
 
             # plot
+            # reference for multiple plots in a grid
+            # http://stackoverflow.com/questions/9603230/how-to-use-matplotlib-tight-layout-with-figure
+
             y = mlab.normpdf(bins, mu, sigma).cumsum()
             y /= y[-1]
             y[np.isnan(y)] = 0.
             y_norm = scaler.fit_transform(y)
 
-            ax.plot(bins, y_norm, 'k--', linewidth=1.5, label='Theoretical')
-            ax.set_ylabel('Cumulative frequency')
-            ax.set_xlabel('Proportion impervious surface')
-            ax.set_ylim([0., 1.2])
-            ax.set_xlim([-0.2, 1.])
+            plt.plot(bins, y_norm, 'k--', linewidth=1.5, label='Theoretical')
+            # ax.set_ylabel('Cumulative frequency')
+            # ax.set_xlabel('Proportion impervious surface')
+            # ax.set_ylim([0., 1.2])
+            # ax.set_xlim([-0.2, 1.])
             plt.title(str(lu_type) + ' ' + str(cell_i))
-            plt.show()
+    plt.tight_layout()
+    plt.show()
 
     return
 
