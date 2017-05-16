@@ -24,6 +24,7 @@ from sklearn.tree import DecisionTreeClassifier
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.svm import SVC
 from sklearn.metrics import classification_report
+from sklearn.metrics import roc_curve, roc_auc_score
 
 # warnings.filterwarnings("ignore")
 
@@ -168,6 +169,7 @@ def cull_no_data(gdf, df):
     df - dataframe of statistical objects for classification'
     Returns the merged geodataframe
     """
+    # TODO raise exception if left parameter is not a geodataframe
 
     study_area = gdf.merge(df, how='inner', left_on=['Id'], right_index=True)
     study_area.to_file('study_area', driver='ESRI Shapefile')
@@ -183,8 +185,8 @@ def stratify_sample(train_grid):
     to produce the confusion matrix
     """
 
-    grouped_trxi = []  # indices of training samples
-    grouped_tsxi = []  # indices of test samples
+    grouped_trainxi = []  # indices of training samples
+    grouped_testxi = []  # indices of test samples
 
     # splits the samples into two sets by
     # performing random sampling on half the samples
@@ -193,33 +195,37 @@ def stratify_sample(train_grid):
     # of the other half for model testing
     for label, group in train_grid.groupby(by='lu_type'):
         sxi = group.sample(frac=0.5).index
-        grouped_trxi.append(list(sxi))
+        grouped_trainxi.append(list(sxi))
         txi = group.index.difference(sxi)
-        grouped_tsxi.append(list(txi))
+        grouped_testxi.append(list(txi))
 
-    unpacked_trxi = []
-    unpacked_tsxi = []
-    for group in grouped_trxi:
+    unpacked_trainxi = []
+    unpacked_testxi = []
+    for group in grouped_trainxi:
         for xi in group:
-            unpacked_trxi.append(xi)
+            unpacked_trainxi.append(xi)
 
-    for group in grouped_tsxi:
+    for group in grouped_testxi:
         for xi in group:
-            unpacked_tsxi.append(xi)
+            unpacked_testxi.append(xi)
 
-    return pd.Index(unpacked_trxi), pd.Index(unpacked_tsxi)
+    return pd.Index(unpacked_trainxi), pd.Index(unpacked_testxi)
 
 
-def classify_land_use(objects, grid, xp_trials=1):
+def classify_land_use(objects, grid, exp_trials=1):
     """
     Classifies land use.
     objects: GeoDataFrame of the polygon objects
     grid: DataFrame containing data for classification
     """
 
-    for trial in range(xp_trials):
+    for trial in range(1, exp_trials+1):
+        print '========='
+        print 'trial {}'.format(trial)
+        print '========='
         # create directory for experiment trial
         xp_path = os.getcwd() + '\\trial_' + str(trial)
+        print 'creating directory for trial {}...'.format(trial)
 
         if os.path.exists(xp_path):
             print 'path exists! deleting path'
@@ -228,13 +234,13 @@ def classify_land_use(objects, grid, xp_trials=1):
         os.mkdir(xp_path)
 
         # retrieve training cells from grid
-        tr_grid = pd.merge(grid[grid['lu_code'] != 0], objects.loc[:,'min':],
+        training_grid = pd.merge(grid[grid['lu_code'] != 0], objects.loc[:,'min':],
                            right_index=True, left_index=True)
 
-        trxi, tsxi = stratify_sample(tr_grid)
+        train_xi, test_xi = stratify_sample(training_grid)
 
-        tr_x = tr_grid.ix[trxi].pivot(index='lu_type', columns='Id').stack().loc[:,'min':]
-        labels = tr_grid.ix[trxi]['lu_type']
+        training_x = training_grid.ix[train_xi].pivot(index='lu_type', columns='Id').stack().loc[:,'min':]
+        labels = training_grid.ix[train_xi]['lu_type']
 
         x = objects.loc[:, 'min':]
 
@@ -281,26 +287,26 @@ def classify_land_use(objects, grid, xp_trials=1):
 
                 for act_func in mlp_act:
                     for solver in solvers:
-                        print '=========================================================='
-
-                        print 'using {} activation function and {} solver.'.format(act_func, solver)
+                        print '----------------------------------------------------------'
+                        print '{} activation function and {} solver...'.format(act_func, solver)
                         classifier = MLPClassifier(activation=act_func, solver=solver)
-                        classifier.fit(tr_x, labels)
+                        classifier.fit(training_x, labels)
                         pred = pd.DataFrame(classifier.predict(x), index=objects.index, columns=['lu_type'])
 
                         # confusion matrix
-                        pred_results = tr_grid.ix[trxi]['lu_type']
-                        tr_results = pred.ix[trxi]['lu_type']
+                        pred_results = pred.ix[test_xi]['lu_type']
+                        test_results = training_grid.ix[test_xi]['lu_type']
+
                         classes = labels.unique()
 
                         matrix = pd.DataFrame()
 
-                        matrix['truth'] = tr_results
+                        matrix['truth'] = test_results
                         matrix['predict'] = pred_results
 
                         conf_matrix = pd.crosstab(matrix['truth'], matrix['predict']
                                                   , margins=True)
-                        print conf_matrix
+                        # print conf_matrix
                         conf_matrix_fn = ar_path + '\\' + name + '_' + \
                                          act_func + '_' + solver + '.xlsx'
 
@@ -308,51 +314,50 @@ def classify_land_use(objects, grid, xp_trials=1):
                         conf_matrix.to_excel(writer, 'Sheet1')
                         writer.save()
 
-                        cr = classification_report(tr_results, pred_results, classes)
-                        # print cr
+                        cr = classification_report(test_results, pred_results, classes)
+                        print cr
                         clf_grid = pd.merge(grid, pred, right_index=True, left_index=True)
                         clf_grid_path = xp_path + '\\classified_' + name + '_' + act_func + '_' + solver
                         clf_grid.to_file(clf_grid_path
                                     , driver='ESRI Shapefile')
 
-                        print '=========================================================='
+                        print '----------------------------------------------------------'
             else:
-                print '=========================================================='
-
-                print 'using {} classifier.'.format(name)
+                print '----------------------------------------------------------'
+                print '{} classifier...'.format(name)
                 classifier = clf
-                classifier.fit(tr_x, labels)
+                classifier.fit(training_x, labels)
                 pred = pd.DataFrame(classifier.predict(x), index=objects.index, columns=['lu_type'])
 
                 # confusion matrix
-                pred_results = tr_grid.ix[trxi]['lu_type']
-                tr_results = pred.ix[trxi]['lu_type']
+                pred_results = training_grid.ix[test_xi]['lu_type']
+                test_results = pred.ix[test_xi]['lu_type']
                 classes = labels.unique()
 
                 matrix = pd.DataFrame()
 
-                matrix['truth'] = tr_results
+                matrix['truth'] = test_results
                 matrix['predict'] = pred_results
 
                 conf_matrix = pd.crosstab(matrix['truth'], matrix['predict']
                                           , margins=True)
 
-                conf_matrix_fn = ar_path + '\\' + name + '_' + \
-                                 '.xlsx'
+                conf_matrix_fn = ar_path + '\\' + name + '.xlsx'
 
                 writer = pd.ExcelWriter(conf_matrix_fn)
                 conf_matrix.to_excel(writer, 'Sheet1')
                 writer.save()
 
-                print conf_matrix
-                cr = classification_report(tr_results, pred_results, classes)
-                # print cr
-                new = pd.merge(grid, pred, right_index=True, left_index=True)
-                new.to_file('classified_' +
-                            name,
+                # print conf_matrix
+                cr = classification_report(test_results, pred_results, classes)
+                print cr
+                clf_grid = pd.merge(grid, pred, right_index=True, left_index=True)
+                clf_grid_path = xp_path + '\\classified_' + name
+                clf_grid.to_file(clf_grid_path,
                             driver='ESRI Shapefile')
 
-                print '=========================================================='
+                print '----------------------------------------------------------'
+        print '**********************************************************'
 
     return
 
@@ -376,7 +381,7 @@ def main():
 
     study_area = cull_no_data(poly_grid, obj)
 
-    classify_land_use(study_area, poly_grid, 2)
+    classify_land_use(study_area, poly_grid, 3)
 
 
 if __name__ == "__main__":
