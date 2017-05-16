@@ -1,0 +1,7 @@
+row_0,agricultural,com-ind-ins,hidres,lodres,medres,All
+agricultural,9,0,0,0,0,9
+com-ind-ins,0,8,2,0,0,10
+hidres,0,3,7,0,0,10
+lodres,0,0,0,4,0,4
+medres,0,0,0,0,5,5
+All,9,11,9,4,5,38
