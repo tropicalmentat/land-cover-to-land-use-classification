@@ -185,8 +185,8 @@ def stratify_sample(train_grid):
     to produce the confusion matrix
     """
 
-    grouped_trainxi = []  # indices of training samples
-    grouped_testxi = []  # indices of test samples
+    grouped_train_xi = []  # indices of training samples
+    grouped_test_xi = []  # indices of test samples
 
     # splits the samples into two sets by
     # performing random sampling on half the samples
@@ -194,23 +194,27 @@ def stratify_sample(train_grid):
     # uses set operations to determine the indices
     # of the other half for model testing
     for label, group in train_grid.groupby(by='lu_type'):
-        sxi = group.sample(frac=0.5).index
-        grouped_trainxi.append(list(sxi))
-        txi = group.index.difference(sxi)
-        grouped_testxi.append(list(txi))
+        training_xi = group.sample(frac=0.5).index
+        grouped_train_xi.append(list(training_xi))
+        test_xi = group.index.difference(training_xi)
+        grouped_test_xi.append(list(test_xi))
 
     unpacked_trainxi = []
     unpacked_testxi = []
-    for group in grouped_trainxi:
+    for group in grouped_train_xi:
         for xi in group:
             unpacked_trainxi.append(xi)
 
-    for group in grouped_testxi:
+    for group in grouped_test_xi:
         for xi in group:
             unpacked_testxi.append(xi)
 
     return pd.Index(unpacked_trainxi), pd.Index(unpacked_testxi)
 
+
+def assess_accuracy():
+
+    return
 
 def classify_land_use(objects, grid, exp_trials=1):
     """
@@ -223,6 +227,7 @@ def classify_land_use(objects, grid, exp_trials=1):
         print '========='
         print 'trial {}'.format(trial)
         print '========='
+
         # create directory for experiment trial
         xp_path = os.getcwd() + '\\trial_' + str(trial)
         print 'creating directory for trial {}...'.format(trial)
@@ -240,6 +245,7 @@ def classify_land_use(objects, grid, exp_trials=1):
         train_xi, test_xi = stratify_sample(training_grid)
 
         training_x = training_grid.ix[train_xi].pivot(index='lu_type', columns='Id').stack().loc[:,'min':]
+        # test_x = training_grid.ix[test_xi].pivot(index='lu_type', columns='Id').stack().loc[:, 'min':]
         labels = training_grid.ix[train_xi]['lu_type']
 
         x = objects.loc[:, 'min':]
@@ -262,10 +268,6 @@ def classify_land_use(objects, grid, exp_trials=1):
         # create directory for accuracy reports
         ar_path = xp_path + '\\accuracy_reports'
 
-        # if os.path.exists(ar_path):
-        #     print 'path exists! deleting path'
-        #     shutil.rmtree(ar_path)
-        #
         os.mkdir(ar_path)
 
         for name, clf in zip(names, clfs):
@@ -330,8 +332,8 @@ def classify_land_use(objects, grid, exp_trials=1):
                 pred = pd.DataFrame(classifier.predict(x), index=objects.index, columns=['lu_type'])
 
                 # confusion matrix
-                pred_results = training_grid.ix[test_xi]['lu_type']
-                test_results = pred.ix[test_xi]['lu_type']
+                pred_results = pred.ix[test_xi]['lu_type']
+                test_results = training_grid.ix[test_xi]['lu_type']
                 classes = labels.unique()
 
                 matrix = pd.DataFrame()
