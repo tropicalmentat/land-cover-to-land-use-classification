@@ -23,8 +23,7 @@ from sklearn.neural_network import MLPClassifier
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.svm import SVC
-from sklearn.metrics import classification_report
-from sklearn.metrics import roc_curve, roc_auc_score
+from sklearn.metrics import classification_report, f1_score, precision_score, recall_score, accuracy_score
 
 # warnings.filterwarnings("ignore")
 
@@ -212,7 +211,8 @@ def stratify_sample(train_grid):
     return pd.Index(unpacked_trainxi), pd.Index(unpacked_testxi)
 
 
-def assess_accuracy():
+def accuracy_summary(clf_name, acc_score, path):
+
 
     return
 
@@ -267,8 +267,12 @@ def classify_land_use(objects, grid, exp_trials=1):
 
         # create directory for accuracy reports
         ar_path = xp_path + '\\accuracy_reports'
-
         os.mkdir(ar_path)
+
+        # lists for accuracy assessment
+        acc_summary = pd.DataFrame()
+        clf_name = []
+        clf_as = []
 
         for name, clf in zip(names, clfs):
 
@@ -312,12 +316,22 @@ def classify_land_use(objects, grid, exp_trials=1):
                         conf_matrix_fn = ar_path + '\\' + name + '_' + \
                                          act_func + '_' + solver + '.xlsx'
 
-                        writer = pd.ExcelWriter(conf_matrix_fn)
-                        conf_matrix.to_excel(writer, 'Sheet1')
-                        writer.save()
+                        writer_cm = pd.ExcelWriter(conf_matrix_fn)
+                        conf_matrix.to_excel(writer_cm, 'Sheet1')
+                        writer_cm.save()
 
                         cr = classification_report(test_results, pred_results, classes)
-                        print cr
+                        # f1 = f1_score(test_results, pred_results, labels=classes, average='micro')
+                        # ps = precision_score(test_results, pred_results, labels=classes, average='micro')
+                        # rs = recall_score(test_results, pred_results, labels=classes, average='micro')
+                        acc_score = accuracy_score(test_results, pred_results)
+                        # print 'f1 score:{}'.format(f1)
+                        # print 'precision score:{}'.format(ps)
+                        # print 'recall score: {}'.format(rs)
+                        clf_name.append(name + '_' + act_func + '_' + solver)
+                        clf_as.append(acc_score)
+                        print 'accuracy score:{}'.format(acc_score)
+                        # print cr
                         clf_grid = pd.merge(grid, pred, right_index=True, left_index=True)
                         clf_grid_path = xp_path + '\\classified_' + name + '_' + act_func + '_' + solver
                         clf_grid.to_file(clf_grid_path
@@ -346,13 +360,24 @@ def classify_land_use(objects, grid, exp_trials=1):
 
                 conf_matrix_fn = ar_path + '\\' + name + '.xlsx'
 
-                writer = pd.ExcelWriter(conf_matrix_fn)
-                conf_matrix.to_excel(writer, 'Sheet1')
-                writer.save()
+                writer_cm = pd.ExcelWriter(conf_matrix_fn)
+                conf_matrix.to_excel(writer_cm, 'Sheet1')
+                writer_cm.save()
 
                 # print conf_matrix
                 cr = classification_report(test_results, pred_results, classes)
-                print cr
+                # f1 = f1_score(test_results, pred_results, labels=classes, average='micro')
+                # ps = precision_score(test_results, pred_results, labels=classes, average='micro')
+                # rs = recall_score(test_results, pred_results, labels=classes, average='micro')
+                # print 'f1 score:{}'.format(f1)
+                # print 'precision score:{}'.format(ps)
+                # print 'recall score: {}'.format(rs)
+                acc_score = accuracy_score(test_results, pred_results)
+                clf_name.append(name)
+                clf_as.append(acc_score)
+                print 'accuracy score:{}'.format(acc_score)
+
+                # print cr
                 clf_grid = pd.merge(grid, pred, right_index=True, left_index=True)
                 clf_grid_path = xp_path + '\\classified_' + name
                 clf_grid.to_file(clf_grid_path,
@@ -360,6 +385,17 @@ def classify_land_use(objects, grid, exp_trials=1):
 
                 print '----------------------------------------------------------'
         print '**********************************************************'
+        acc_summary['clf_name'] = clf_name
+        acc_summary['score'] = clf_as
+
+        summary_fn = ar_path + '\\' + 'trial_' + str(trial) + '_' + 'summary' + '.xlsx'
+        writer_as = pd.ExcelWriter(summary_fn)
+        acc_summary.to_excel(writer_as, 'Sheet1')
+        writer_as.save()
+
+
+
+
 
     return
 
